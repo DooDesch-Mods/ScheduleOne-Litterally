@@ -74,6 +74,15 @@ namespace Trashville.Instanced
         private const float RenderCullMargin = 6f;   // expand the cull frustum so big/edge items never pop at the screen edge
         private static int _lastDrawn;               // visible instances drawn last frame (after culling)
 
+        // ----- incremental-add model (routing the GAME's generated trash in one item at a time) -----
+        // The benchmark path (Setup/BuildPending) builds a whole field at once with contiguous per-type
+        // [Start,Len) ranges. The router instead appends items of mixed types in arbitrary order via AddOne, so
+        // Render is driven by PER-TYPE index buckets (filled by both paths) rather than contiguous ranges.
+        private static int _capacity;                          // allocated length of the SoA arrays
+        private static List<int>[] _typeBuckets;               // _typeBuckets[t] = instance indices of type t (for contiguous-ish render)
+        private static readonly Dictionary<string, int> _typeIndex = new Dictionary<string, int>();   // trash id -> index into _types
+        internal const int CapacityCeiling = 2_000_000;        // hard managed cap so the router can never grow arrays unbounded
+
         // ----- struct-of-arrays instance state (pure managed) -----
         private static float[] _px, _pz, _py, _vy, _restY;
         private static float[] _qx, _qy, _qz, _qw;   // per-item ROOT rotation (for materialize)
@@ -188,16 +197,18 @@ namespace Trashville.Instanced
                 for (int t = 0; t < _types.Length; t++)
                 {
                     TType ty = _types[t];
-                    if (ty.Parts == null || ty.Len <= 0) continue;
-                    int end = ty.Start + ty.Len;
+                    List<int> bucket = (_typeBuckets != null && t < _typeBuckets.Length) ? _typeBuckets[t] : null;
+                    if (ty.Parts == null || bucket == null || bucket.Count == 0) continue;
+                    int bn = bucket.Count;
                     for (int pi = 0; pi < ty.Parts.Length; pi++)
                     {
                         Part part = ty.Parts[pi];
                         if (part.Mesh == null || part.Mats == null || part.Mats.Length == 0) continue;
                         int subCount = part.Mats.Length;
                         int count = 0;
-                        for (int i = ty.Start; i < end; i++)
+                        for (int bi = 0; bi < bn; bi++)
                         {
+                            int i = bucket[bi];
                             if (_hidden[i] || _dead[i]) continue;
                             if (planes != null && !Frustum.Contains(planes, _px[i], _py[i], _pz[i], RenderCullMargin)) continue;
                             if (pi == 0) vis++;   // count each visible instance once (NOT per submesh)
@@ -300,6 +311,9 @@ namespace Trashville.Instanced
 
             _count = n;
             _active = n;
+            _capacity = n;
+            // Render is bucket-driven; fill one bucket per type from the contiguous ranges this path just laid out.
+            RebuildBuckets();
             if (_batch == null) _batch = new Il2CppStructArray<Matrix4x4>(BatchSize);
 
             Core.Log?.Msg($"[inst] {n} falling instances across {_types.Length} type(s), radius={radius:F0}, " +
@@ -319,6 +333,93 @@ namespace Trashville.Instanced
                 _types[t].Start = acc;
                 _types[t].Len = len;
                 acc += len;
+            }
+        }
+
+        // =========================================================================================
+        //  Incremental add (router): feed ONE game-generated trash item into the instanced field as data.
+        //  Returns the type index (>=0) if recorded, or -1 if the id has no renderable mesh (caller then leaves
+        //  the real item alive instead of destroying it). Uses the generator's EXACT pose (already ground-correct),
+        //  so no calibration/ground-snap is needed and the data matches where the real item would have sat.
+        // =========================================================================================
+        internal static int AddOne(string id, Vector3 pos, Quaternion rot)
+        {
+            if (string.IsNullOrEmpty(id)) return -1;
+            int t = TypeIndexFor(id);
+            if (t < 0) return -1;                         // unrenderable id -> don't store a ghost
+            if (_count >= CapacityCeiling) return -2;     // managed hard cap reached -> signal "at cap" (caller leaves item real)
+
+            EnsureCapacity(_count + 1);
+            int i = _count;
+
+            _type[i] = (byte)t;
+            _px[i] = pos.x; _py[i] = pos.y; _pz[i] = pos.z; _restY[i] = pos.y; _vy[i] = 0f;
+            _qx[i] = rot.x; _qy[i] = rot.y; _qz[i] = rot.z; _qw[i] = rot.w;
+            _settled[i] = true;                           // placed where the game put it -> no fall anim, renders immediately
+            _hidden[i] = _dead[i] = _realized[i] = false;
+            _matrices[i] = BuildRootMatrix(pos.x, pos.y, pos.z, rot.x, rot.y, rot.z, rot.w);
+
+            _count++;
+            _active = _count;
+            (_typeBuckets[t] ?? (_typeBuckets[t] = new List<int>(1024))).Add(i);
+            if (_batch == null) _batch = new Il2CppStructArray<Matrix4x4>(BatchSize);
+            return t;
+        }
+
+        // Resolve a trash id to a type index, lazily building (and appending) a new type for ids the game spawns
+        // that are not in our curated Palette (pipe, crushedcuke, cigarette, cuke, ...). -1 if it has no mesh.
+        private static int TypeIndexFor(string id)
+        {
+            if (_typeIndex.TryGetValue(id, out int idx)) return idx;
+            var tm = Spawning.TrashSpawner.TrashManagerOrNull();
+            if (tm == null) return -1;
+            TType ty = BuildType(tm, id, 1f);
+            if (ty == null) { _typeIndex[id] = -1; return -1; }   // cache the negative so we don't rebuild every spawn
+            int newIdx = (_types == null) ? 0 : _types.Length;
+            if (_types == null) _types = new TType[] { ty };
+            else { Array.Resize(ref _types, _types.Length + 1); _types[newIdx] = ty; }
+            EnsureBuckets();
+            _typeIndex[id] = newIdx;
+            Core.Log?.Msg($"[route] new instanced type '{id}' (#{newIdx}, parts={ty.Parts.Length})");
+            return newIdx;
+        }
+
+        private static void EnsureCapacity(int need)
+        {
+            if (_px != null && need <= _capacity) return;
+            int target;
+            if (_px == null) target = Math.Max(65536, need);
+            else target = _capacity + 65536;                 // grow in fixed 64k chunks (bounded copy), never doubling
+            if (target < need) target = need;
+            if (target > CapacityCeiling) target = CapacityCeiling;
+
+            Array.Resize(ref _px, target); Array.Resize(ref _pz, target); Array.Resize(ref _py, target);
+            Array.Resize(ref _vy, target); Array.Resize(ref _restY, target);
+            Array.Resize(ref _qx, target); Array.Resize(ref _qy, target); Array.Resize(ref _qz, target); Array.Resize(ref _qw, target);
+            Array.Resize(ref _type, target);
+            Array.Resize(ref _settled, target); Array.Resize(ref _hidden, target); Array.Resize(ref _dead, target); Array.Resize(ref _realized, target);
+            Array.Resize(ref _matrices, target);
+            _capacity = target;
+        }
+
+        private static void EnsureBuckets()
+        {
+            int n = _types != null ? _types.Length : 0;
+            if (_typeBuckets == null) _typeBuckets = new List<int>[Math.Max(8, n)];
+            else if (_typeBuckets.Length < n) Array.Resize(ref _typeBuckets, n);
+        }
+
+        // Rebuild all per-type buckets from _type[0.._count) (used by the benchmark contiguous path).
+        private static void RebuildBuckets()
+        {
+            EnsureBuckets();
+            for (int t = 0; t < _typeBuckets.Length; t++) _typeBuckets[t]?.Clear();
+            for (int i = 0; i < _count; i++)
+            {
+                if (_dead[i]) continue;
+                int t = _type[i];
+                if (t < 0 || t >= _typeBuckets.Length) continue;
+                (_typeBuckets[t] ?? (_typeBuckets[t] = new List<int>(1024))).Add(i);
             }
         }
 
@@ -745,12 +846,15 @@ namespace Trashville.Instanced
         {
             _count = 0;
             _active = 0;
+            _capacity = 0;
             _pending = false;
             Calibration.Reset();
             _px = _pz = _py = _vy = _restY = _qx = _qy = _qz = _qw = null;
             _type = null;
             _settled = _hidden = _dead = _realized = null;
             _matrices = null;
+            if (_typeBuckets != null) for (int t = 0; t < _typeBuckets.Length; t++) _typeBuckets[t]?.Clear();
+            _typeIndex.Clear();
         }
 
         internal static void ResetPalette()
@@ -846,8 +950,10 @@ namespace Trashville.Instanced
                     int gx = k % 4, gz = k / 4;
                     Vector3 pos = pp + new Vector3((gx - 1.5f) * ProbeSpacing, ProbeDropHeight, (gz - 1.5f) * ProbeSpacing);
                     TrashItem probe = null;
+                    Spawning.RouteHook.Suppress = true;
                     try { probe = tm.CreateTrashItem(ty.Id, pos, UnityEngine.Random.rotation, Vector3.zero, System.Guid.NewGuid().ToString(), false); }
                     catch (Exception e) { Core.Log?.Warning("[inst] probe spawn failed for " + ty.Id + ": " + e.Message); }
+                    finally { Spawning.RouteHook.Suppress = false; }
                     if (probe != null) MarkRealCreated();
                     _probes.Add(probe);
                     _spawnY.Add(pos.y);
@@ -1024,8 +1130,10 @@ namespace Trashville.Instanced
                     Vector3 vpos = GetPosition(i);
                     Quaternion vrot = GetRotation(i);
                     TrashItem real = null;
+                    Spawning.RouteHook.Suppress = true;
                     try { real = tm.CreateTrashItem(id, vpos, vrot, Vector3.zero, System.Guid.NewGuid().ToString(), false); } // DYNAMIC
                     catch (Exception e) { Core.Log?.Warning("[drift] spawn failed: " + e.Message); }
+                    finally { Spawning.RouteHook.Suppress = false; }
                     if (real == null) continue;
                     MarkRealCreated();
                     Hide(i);   // hide the instanced copy so we watch the real dynamic item fall/settle

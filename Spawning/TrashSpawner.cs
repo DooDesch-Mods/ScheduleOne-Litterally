@@ -223,7 +223,10 @@ namespace Trashville.Spawning
                 }
 
                 string guid = System.Guid.NewGuid().ToString();
-                TrashItem item = tm.CreateTrashItem(id, pos, rot, Vector3.zero, guid, Config.Preferences.SpawnKinematic);
+                RouteHook.Suppress = true;
+                TrashItem item;
+                try { item = tm.CreateTrashItem(id, pos, rot, Vector3.zero, guid, Config.Preferences.SpawnKinematic); }
+                finally { RouteHook.Suppress = false; }
                 if (item != null)
                 {
                     if (Config.Preferences.MuteImpactSounds)

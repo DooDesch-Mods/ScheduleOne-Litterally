@@ -213,8 +213,11 @@ namespace Trashville.Instanced
                     // the colliders block the player; performance mode => KINEMATIC (cheapest, no player collision).
                     Vector3 pos = InstancedTrash.GetPosition(idx);
                     Quaternion rot = InstancedTrash.GetRotation(idx);
-                    TrashItem item = tm.CreateTrashItem(InstancedTrash.GetTypeId(idx), pos, rot, Vector3.zero,
-                        NextId(), !Collide);
+                    // Suppress so the route-hook never re-absorbs our OWN near-player interaction items.
+                    Spawning.RouteHook.Suppress = true;
+                    TrashItem item;
+                    try { item = tm.CreateTrashItem(InstancedTrash.GetTypeId(idx), pos, rot, Vector3.zero, NextId(), !Collide); }
+                    finally { Spawning.RouteHook.Suppress = false; }
                     if (item != null)
                     {
                         InstancedTrash.MarkRealCreated();   // a real Saveable TrashItem now exists -> save guard must sweep

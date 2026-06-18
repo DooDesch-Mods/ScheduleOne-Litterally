@@ -115,6 +115,7 @@ namespace Trashville
             PerfSampler.Tick();
             AblationController.Tick();
             PhysicsProbe.Tick();
+            Spawning.RouteHook.Tick();                       // drain absorbed game-trash reals (destroy after RPC fan-out)
             Instanced.InstancedTrash.Tick(Time.deltaTime);   // pure-array gravity sim (100k path)
             Instanced.InstancedTrash.DriftTick(Time.deltaTime); // ground-drift self-test timer (no-op unless armed)
             Instanced.Virtualizer.Tick();                    // materialize near-player instances -> real trash

@@ -18,6 +18,12 @@ namespace Trashville.SaveGuard
         internal static void ForceClearForSave(string reason)
         {
             TrashSpawner.CancelPending();
+            // Routing: stop absorbing, drain the transient destroy queue, and un-boost generators so a continued
+            // session isn't stuck with boosted generators. Routed trash is pure DATA (never Saveable) so it can
+            // never bloat the save; only the transient/near-materialized reals matter and are swept below.
+            Trashville.Spawning.RouteHook.Active = false;
+            Trashville.Spawning.RouteHook.Tick();
+            Trashville.Spawning.GeneratorBoost.Restore();
             Trashville.Instanced.Virtualizer.ClearAll();          // destroy any materialized real items (don't persist)
             Trashville.Instanced.InstancedTrash.AbortCalibration(); // destroy any in-flight calibration probes (real Saveable items)
             Trashville.Instanced.InstancedTrash.AbortDrift();      // destroy any in-flight ground-drift probes (real Saveable items)
