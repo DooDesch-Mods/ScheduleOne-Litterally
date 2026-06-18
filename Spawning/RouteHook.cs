@@ -24,10 +24,20 @@ namespace Trashville.Spawning
         internal static bool Probe = false;                  // diagnostic: log-only counting (Phase 0)
         [ThreadStatic] internal static bool Suppress;        // TRUE around mod-owned create calls so they stay REAL (not absorbed)
 
-        // dedup within a generation burst (all echoes of one item are same-frame); cleared each Tick.
-        private static readonly HashSet<int> _seen = new HashSet<int>();
+        // The game spawns trash ABOVE the ground and lets physics settle it. If we capture the pose immediately
+        // it floats, so we keep the real item alive a moment, let it settle, then virtualize at its SETTLED
+        // transform (natural orientation, flush on the ground - like the rest of the field). _tracked dedups the
+        // 4 echo-calls per item (persists until the item is virtualized, not just per-frame).
+        private sealed class SettleItem { public TrashItem Item; public Rigidbody Rb; public int Age; }
+        private static readonly Dictionary<int, SettleItem> _settling = new Dictionary<int, SettleItem>();
+        private static readonly HashSet<int> _tracked = new HashSet<int>();
+        private static readonly List<int> _doneSettling = new List<int>();
         private static readonly List<TrashItem> _destroyQueue = new List<TrashItem>();
         internal static int Absorbed, Skipped, AtCap;
+        private const int SettleMinFrames = 6;       // let it actually start falling before judging it settled
+        private const int SettleMaxFrames = 150;     // ~2.5s cap: virtualize even if it never fully sleeps
+        private const float SettleVel2 = 0.01f;
+        private const int SettlingCap = 1200;        // burst overflow: above this, ground-snap immediately instead of tracking
 
         // ----- Phase 0 diagnostic counters -----
         internal static int PubCalls, PrivCalls;
@@ -43,25 +53,67 @@ namespace Trashville.Spawning
 
             int iid;
             try { iid = result.GetInstanceID(); } catch { return; }
-            if (!_seen.Add(iid)) { Skipped++; return; }      // an echo of an already-handled item
+            if (!_tracked.Add(iid)) { Skipped++; return; }   // an echo of an item we're already handling
 
             try
             {
-                string id = result.ID;
-                Vector3 pos = result.transform.position;
-                Quaternion rot = result.transform.rotation;
-                int t = InstancedTrash.AddOne(id, pos, rot);
-                if (t == -2) { AtCap++; return; }            // managed cap reached -> leave this one real (self-throttles)
-                if (t < 0) return;                           // unrenderable id -> leave real, do NOT destroy
-                Absorbed++;
-                _destroyQueue.Add(result);                   // defer destroy to Tick (out of the RPC fan-out)
+                if (_settling.Count >= SettlingCap) { Record(iid, result, true); return; }   // burst overflow -> ground-snap now
+                Rigidbody rb = null; try { rb = result.GetComponentInChildren<Rigidbody>(); } catch { }
+                _settling[iid] = new SettleItem { Item = result, Rb = rb, Age = 0 };
             }
-            catch (Exception e) { Core.Log?.Warning("[route] absorb: " + e.Message); }
+            catch (Exception e) { Core.Log?.Warning("[route] track: " + e.Message); _tracked.Remove(iid); }
         }
 
-        // Per-frame: destroy the absorbed reals (their data already renders), then reset the same-frame dedup set.
+        private const int GroundMask = ~(1 << 10);   // everything except the Trash layer (10)
+        private static int _heightLogged;
+
+        // Capture an item's pose into the instanced field as data, then queue its real object for destruction.
+        private static void Record(int iid, TrashItem item, bool groundSnap)
+        {
+            try
+            {
+                if (item == null) { _tracked.Remove(iid); return; }
+                string id = item.ID;
+                Vector3 pos = item.transform.position;
+                Quaternion rot = item.transform.rotation;
+                // Robustness: if the "settled" item is still well above the ground (early/timeout capture, or the
+                // game placed it kinematic in the air), ground-snap so it can never float. Also a one-shot
+                // diagnostic of the height-above-ground for the first few, to confirm grounding.
+                if (Physics.Raycast(pos + Vector3.up * 0.3f, Vector3.down, out RaycastHit grh, 80f, GroundMask, QueryTriggerInteraction.Ignore))
+                {
+                    float above = pos.y - grh.point.y;
+                    if (_heightLogged < 10) { _heightLogged++; Core.Log?.Msg($"[route] settled '{id}' {above:F2}m above ground{(above > 0.4f ? " -> ground-snap" : "")}"); }
+                    if (above > 0.4f) groundSnap = true;
+                }
+                int t = InstancedTrash.AddOne(id, pos, rot, groundSnap);
+                if (t == -2) { AtCap++; _tracked.Remove(iid); return; }   // at managed cap -> leave it real
+                if (t < 0) { _tracked.Remove(iid); return; }              // unrenderable id -> leave it real
+                Absorbed++;
+                _destroyQueue.Add(item);                                  // destroy next Tick (out of the RPC fan-out)
+            }
+            catch (Exception e) { Core.Log?.Warning("[route] record: " + e.Message); }
+            finally { _tracked.Remove(iid); }
+        }
+
+        // Per-frame: advance settling items and virtualize the ones that have come to rest; then destroy the
+        // already-virtualized reals.
         internal static void Tick()
         {
+            if (_settling.Count > 0)
+            {
+                _doneSettling.Clear();
+                foreach (var kv in _settling)
+                {
+                    SettleItem s = kv.Value;
+                    if (s.Item == null) { _doneSettling.Add(kv.Key); _tracked.Remove(kv.Key); continue; }
+                    s.Age++;
+                    bool settled = s.Age >= SettleMaxFrames ||
+                        (s.Age >= SettleMinFrames && (s.Rb == null || s.Rb.velocity.sqrMagnitude < SettleVel2));
+                    if (settled) { Record(kv.Key, s.Item, false); _doneSettling.Add(kv.Key); }
+                }
+                for (int k = 0; k < _doneSettling.Count; k++) _settling.Remove(_doneSettling[k]);
+            }
+
             if (_destroyQueue.Count > 0)
             {
                 Suppress = true;
@@ -78,7 +130,12 @@ namespace Trashville.Spawning
                 finally { Suppress = false; }
                 _destroyQueue.Clear();
             }
-            _seen.Clear();   // echoes of any item are synchronous within a frame, so per-frame dedup is sufficient
+        }
+
+        // Drop all in-flight tracking (routing off / save): leave settling items as real game trash, clear state.
+        internal static void ResetState()
+        {
+            _settling.Clear(); _tracked.Clear(); _doneSettling.Clear(); _destroyQueue.Clear();
         }
 
         private static void ProbeNote(bool isPrivate, TrashItem result)
@@ -97,7 +154,7 @@ namespace Trashville.Spawning
 
         internal static void ResetCounts()
         {
-            PubCalls = PrivCalls = _logged = 0; _distinctPub.Clear(); _distinctPriv.Clear();
+            PubCalls = PrivCalls = _logged = _heightLogged = 0; _distinctPub.Clear(); _distinctPriv.Clear();
             Absorbed = Skipped = AtCap = 0;
         }
 
@@ -112,7 +169,7 @@ namespace Trashville.Spawning
                     Core.Log?.Msg("[route] routing ON: game-generated trash is absorbed into the instanced field.");
                     break;
                 case "off":
-                    Active = false; Tick();
+                    Active = false; Tick(); ResetState();
                     GeneratorBoost.Restore();
                     InstancedTrash.Clear();
                     Core.Log?.Msg("[route] routing OFF: generators restored, instanced field cleared.");
@@ -134,7 +191,7 @@ namespace Trashville.Spawning
                     {
                         var tm = TrashSpawner.TrashManagerOrNull();
                         int mgr = -1; try { if (tm != null) mgr = TrashSpawner.TrashItemCount(tm); } catch { }
-                        Core.Log?.Msg($"[route] STAT  active={Active}  instanced={InstancedTrash.Count}  realTrashItems(manager)={mgr}  absorbed={Absorbed} skippedEchoes={Skipped} atCap={AtCap}");
+                        Core.Log?.Msg($"[route] STAT  active={Active}  instanced={InstancedTrash.Count}  realTrashItems(manager)={mgr}  settling={_settling.Count}  absorbed={Absorbed} skippedEchoes={Skipped} atCap={AtCap}");
                         if (Probe) Core.Log?.Msg($"[route-probe]  public calls={PubCalls} distinct={_distinctPub.Count}  private calls={PrivCalls} distinct={_distinctPriv.Count}");
                         break;
                     }

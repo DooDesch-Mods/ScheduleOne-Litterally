@@ -23,6 +23,7 @@ namespace Trashville.SaveGuard
             // never bloat the save; only the transient/near-materialized reals matter and are swept below.
             Trashville.Spawning.RouteHook.Active = false;
             Trashville.Spawning.RouteHook.Tick();
+            Trashville.Spawning.RouteHook.ResetState();
             Trashville.Spawning.GeneratorBoost.Restore();
             Trashville.Instanced.Virtualizer.ClearAll();          // destroy any materialized real items (don't persist)
             Trashville.Instanced.InstancedTrash.AbortCalibration(); // destroy any in-flight calibration probes (real Saveable items)

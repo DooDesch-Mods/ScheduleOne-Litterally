@@ -342,7 +342,7 @@ namespace Trashville.Instanced
         //  the real item alive instead of destroying it). Uses the generator's EXACT pose (already ground-correct),
         //  so no calibration/ground-snap is needed and the data matches where the real item would have sat.
         // =========================================================================================
-        internal static int AddOne(string id, Vector3 pos, Quaternion rot)
+        internal static int AddOne(string id, Vector3 pos, Quaternion rot, bool groundSnap = false)
         {
             if (string.IsNullOrEmpty(id)) return -1;
             int t = TypeIndexFor(id);
@@ -352,12 +352,23 @@ namespace Trashville.Instanced
             EnsureCapacity(_count + 1);
             int i = _count;
 
+            float restY = pos.y;
+            if (groundSnap)
+            {
+                // fallback when we could NOT let the item settle (e.g. burst overflow): raycast to the ground and
+                // sit the mesh on it via geometric clearance, so it doesn't float at its airborne spawn height.
+                float gy = pos.y;
+                if (Physics.Raycast(pos + Vector3.up * 0.5f, Vector3.down, out RaycastHit rh, 60f, GroundRayMask, QueryTriggerInteraction.Ignore))
+                    gy = rh.point.y;
+                restY = gy + ComputeClearance(_types[t], rot);
+            }
+
             _type[i] = (byte)t;
-            _px[i] = pos.x; _py[i] = pos.y; _pz[i] = pos.z; _restY[i] = pos.y; _vy[i] = 0f;
+            _px[i] = pos.x; _py[i] = restY; _pz[i] = pos.z; _restY[i] = restY; _vy[i] = 0f;
             _qx[i] = rot.x; _qy[i] = rot.y; _qz[i] = rot.z; _qw[i] = rot.w;
             _settled[i] = true;                           // placed where the game put it -> no fall anim, renders immediately
             _hidden[i] = _dead[i] = _realized[i] = false;
-            _matrices[i] = BuildRootMatrix(pos.x, pos.y, pos.z, rot.x, rot.y, rot.z, rot.w);
+            _matrices[i] = BuildRootMatrix(pos.x, restY, pos.z, rot.x, rot.y, rot.z, rot.w);
 
             _count++;
             _active = _count;
