@@ -56,7 +56,7 @@ namespace Trashville.Instanced
         private static TType[] _types;
         private static Il2CppStructArray<Matrix4x4> _batch;
         private static readonly float[] _renderPlanes = new float[24];
-        private const float RenderCullMargin = 4f;   // expand the cull frustum so big/edge items never pop at the screen edge
+        private const float RenderCullMargin = 6f;   // expand the cull frustum so big/edge items never pop at the screen edge (also covers fast pans)
         private static int _lastDrawn;               // how many instances were actually drawn last frame (after culling)
 
         // ----- struct-of-arrays instance state (pure managed - the sim/scan never touch an il2cpp object) -----
@@ -188,7 +188,7 @@ namespace Trashville.Instanced
                 // inside the view frustum are copied into the batch and drawn; at 100k most of the field is
                 // off-screen every frame, so this is by far the biggest render win. Also skips hidden (materialized)
                 // and dead (picked-up) instances entirely instead of drawing zeroed matrices.
-                float[] planes = Frustum.Compute(UnityEngine.Camera.main, _renderPlanes) ? _renderPlanes : null;
+                float[] planes = Frustum.Compute(Frustum.Cam(), _renderPlanes) ? _renderPlanes : null;
                 int drawn = 0;
                 for (int t = 0; t < _types.Length; t++)
                 {
@@ -747,15 +747,11 @@ namespace Trashville.Instanced
                 {
                     Transform tr = probe.transform;
                     if (genuine) ty.RestRot = tr.rotation;   // only ever bake a REAL settled rotation, never mid-air
-                    // clearance = pivot height above the REAL collision ground (raycast, excluding the Trash layer),
-                    // so the same value can later place a materialized item precisely on the ground with no drop.
-                    float groundY = tr.position.y;
-                    if (Physics.Raycast(new Vector3(tr.position.x, tr.position.y + 1.5f, tr.position.z), Vector3.down,
-                            out RaycastHit gh, 6f, ~(1 << 10), QueryTriggerInteraction.Ignore))
-                    {
-                        groundY = gh.point.y;
-                    }
-                    ty.Clearance = Mathf.Clamp(tr.position.y - groundY, -0.3f, 0.6f);
+                    // clearance = pivot height above the NAVMESH ground - the SAME ground source the virtual field
+                    // uses - so a field item rests at navmeshY+clearance AND a materialized item spawned at that
+                    // exact spot needs no correction (no height jump when virtual -> real).
+                    Ground g = SampleGround(tr.position.x, tr.position.z, tr.position.y);
+                    ty.Clearance = Mathf.Clamp(tr.position.y - g.Y, -0.3f, 0.6f);
                     Core.Log?.Msg($"[inst] calibrated '{ty.Id}': clearance={ty.Clearance:F2} rot={(genuine ? tr.rotation.eulerAngles.ToString() : "identity(timeout)")}");
                 }
                 catch (Exception e) { Core.Log?.Warning("[inst] calibrate capture failed for " + ty.Id + ": " + e.Message); }

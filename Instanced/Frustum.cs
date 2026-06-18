@@ -10,6 +10,18 @@ namespace Trashville.Instanced
     /// </summary>
     internal static class Frustum
     {
+        private static Camera _cam;
+
+        /// <summary>Camera.main, but cached so a TRANSIENT null (e.g. a frame during scene work) returns the last
+        /// valid camera instead of null - a null frustum would otherwise bypass culling and draw/materialize the
+        /// whole 100k field for that frame (a hitch spike).</summary>
+        internal static Camera Cam()
+        {
+            Camera c = Camera.main;
+            if (c != null) _cam = c;
+            return _cam;
+        }
+
         /// <summary>Extract the 6 world-space frustum planes from a camera (Gribb-Hartmann from the
         /// view-projection matrix). Returns false (and leaves planes untouched) if there is no camera.</summary>
         internal static bool Compute(Camera cam, float[] planes)

@@ -22,15 +22,18 @@ namespace Trashville.Instanced
     {
         internal static bool Enabled = false;
         internal static bool Predict = true;        // anticipate camera turn / player movement and pre-materialize
+        internal static bool RealKinematic = true;  // spawn materialized items kinematic (frozen at the virtual pose = seamless, no fall/jiggle)
         internal static float ViewDist = 32f;       // materialize instances this far AHEAD, inside the view frustum
         internal static float BackRadius = 6f;      // ...plus this radius around the player (anti-glitch when turning/backing)
         internal static int MaxReal = 600;          // cap on simultaneous real items - THE perf/range dial (each real item costs ~0.004ms)
+        internal static int NewPerFrame = 100;      // materializations/frame - cheap now spawns are kinematic; high so the real layer keeps up with movement (no trailing "loading" wave)
         private const float Margin = 2.5f;          // frustum expansion (m) so items materialize just before on-screen
         private const int DemoteDelayFrames = 20;   // keep an item real this many frames after it leaves view (anti-churn)
-        private const int NewPerFrame = 30;         // throttle materializations/frame so panning never hitches
         private const float DemoteVel2 = 0.06f;     // only demote once the item has (nearly) stopped moving
         private const float SettleGraceFrames = 10; // min frames a fresh real item must live before it can demote (settle first)
-        private static readonly int _groundMask = ~(1 << 10);   // raycast everything EXCEPT the Trash layer (10) for placement
+
+        // CreateTrashItem PARSES this string as a real System.Guid, so it must be valid GUID format.
+        private static string NextId() => System.Guid.NewGuid().ToString();
 
         // ----- predictive look-ahead (extrapolate camera turn + player movement; clamped so a flick can't over-predict) -----
         private const float PredictFrames = 9f;     // how many frames ahead to extrapolate
@@ -68,7 +71,7 @@ namespace Trashville.Instanced
                 return;
             }
 
-            Camera cam = Camera.main;
+            Camera cam = Frustum.Cam();
             float[] cur = Frustum.Compute(cam, _planes) ? _planes : null;   // null => no camera: plain ViewDist radius
 
             // ----- predictive look-ahead: extrapolate player movement + camera turn (clamped so a flick can't
@@ -174,21 +177,14 @@ namespace Trashville.Instanced
                 }
                 try
                 {
+                    // Spawn at the EXACT virtual pose (already the calibrated NavMesh resting height) and KINEMATIC,
+                    // so the item appears already at rest with NO height jump, fall or jiggle - the virtual->real
+                    // swap is invisible. No raycast (it only threw away the already-correct virtual Y); a cheap
+                    // sequential id instead of Guid.NewGuid() to avoid per-materialize GC.
                     Vector3 pos = InstancedTrash.GetPosition(idx);
                     Quaternion rot = InstancedTrash.GetRotation(idx);
-                    // Place precisely on the REAL collision ground (raycast, excluding the Trash layer) so the item
-                    // appears already settled instead of dropping/jiggling into place ("fresh fall").
-                    try
-                    {
-                        if (Physics.Raycast(new Vector3(pos.x, pos.y + 1.5f, pos.z), Vector3.down,
-                                out RaycastHit hit, 8f, _groundMask, QueryTriggerInteraction.Ignore))
-                        {
-                            pos.y = hit.point.y + InstancedTrash.GetClearance(idx);
-                        }
-                    }
-                    catch { }
                     TrashItem item = tm.CreateTrashItem(InstancedTrash.GetTypeId(idx), pos, rot, Vector3.zero,
-                        System.Guid.NewGuid().ToString(), false);
+                        NextId(), RealKinematic);
                     if (item != null)
                     {
                         InstancedTrash.MarkRealCreated();   // a real Saveable TrashItem now exists -> save guard must sweep

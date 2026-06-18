@@ -38,7 +38,7 @@ namespace Trashville.UI
 
             if (Time.unscaledTime >= _nextRebuild)
             {
-                _nextRebuild = Time.unscaledTime + 0.25f;
+                _nextRebuild = Time.unscaledTime + 0.1f;   // ~10Hz so the counters read live (not a stale ~1Hz number)
                 _cached = Build();
             }
 
