@@ -540,7 +540,11 @@ namespace Trashville.Instanced
             if (mfs == null || mfs.Length == 0) return null;
 
             Matrix4x4 worldToRoot = go.transform.worldToLocalMatrix;
-            var groups = new Dictionary<string, (MeshFilter mf, Mesh m, Material mat, int verts)>();
+            // Group LOD variants by base name and keep the HIGHEST-DETAIL LOD (smallest _LOD index; no suffix =
+            // LOD0). Deep-check finding: keeping the CHEAPEST LOD dropped glassbottle's label (LOD0 has
+            // 'glass bottle label mat', LOD2 the plain mat) and gave energydrink the coarse Interior_LOD1 instead
+            // of Interior LOD0. LOD0 = exactly what the player sees on the real prefab up close.
+            var groups = new Dictionary<string, (MeshFilter mf, Mesh m, Material mat, int lod, int verts)>();
             for (int j = 0; j < mfs.Length; j++)
             {
                 MeshFilter mf = mfs[j]; if (mf == null) continue;
@@ -548,9 +552,10 @@ namespace Trashville.Instanced
                 MeshRenderer mr = mf.GetComponent<MeshRenderer>();
                 if (mr == null || mr.sharedMaterial == null) continue;
                 string baseName = StripLod(m.name);
-                if (!groups.TryGetValue(baseName, out var cur) || m.vertexCount < cur.verts)
+                int lod = ParseLod(m.name);
+                if (!groups.TryGetValue(baseName, out var cur) || lod < cur.lod || (lod == cur.lod && m.vertexCount > cur.verts))
                 {
-                    groups[baseName] = (mf, m, mr.sharedMaterial, m.vertexCount);
+                    groups[baseName] = (mf, m, mr.sharedMaterial, lod, m.vertexCount);
                 }
             }
             if (groups.Count == 0) return null;
@@ -583,6 +588,24 @@ namespace Trashville.Instanced
                 if (digits) return name.Substring(0, idx);
             }
             return name;
+        }
+
+        /// <summary>Trailing "_LOD&lt;n&gt;" index; a name with no suffix is the highest detail (LOD 0).</summary>
+        private static int ParseLod(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return 0;
+            int idx = name.LastIndexOf("_LOD", StringComparison.OrdinalIgnoreCase);
+            if (idx > 0 && idx < name.Length - 4)
+            {
+                int n = 0; bool any = false, digits = true;
+                for (int k = idx + 4; k < name.Length; k++)
+                {
+                    if (char.IsDigit(name[k])) { n = n * 10 + (name[k] - '0'); any = true; }
+                    else { digits = false; break; }
+                }
+                if (digits && any) return n;
+            }
+            return 0;
         }
 
         /// <summary>Debug: dump every renderable mesh part of each palette prefab + which parts the instancer renders.</summary>
