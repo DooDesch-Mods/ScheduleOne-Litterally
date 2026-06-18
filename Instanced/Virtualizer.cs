@@ -7,20 +7,28 @@ namespace Trashville.Instanced
     /// <summary>
     /// Makes the virtual 100k behave 1:1 like base-game trash WITHOUT paying for 100k GameObjects: each frame
     /// it MATERIALIZES the settled instances within reach of the player into real game TrashItems (full native
-    /// interaction - E-pickup, the grabber, collision, sell value) and hides their virtual copy; when the
+    /// interaction - E-pickup, the grabber, collision, throw, sell value) and hides their virtual copy; when the
     /// player walks away it demotes them back to virtual at their resting pose; when the player picks one up
-    /// (the real TrashItem is destroyed) it removes the virtual permanently. Only ~dozens are ever real, so it
-    /// stays at instanced-render framerate.
+    /// (the real TrashItem is destroyed) it removes the virtual permanently. Only the items in a generous radius
+    /// around the player are ever real, so it stays at instanced-render framerate.
     /// </summary>
     internal static class Virtualizer
     {
         internal static bool Enabled = false;
-        internal static float Radius = 4.5f;          // materialize settled instances within this 2D distance
-        private const float DemoteHysteresis = 1.5f;  // demote only once this far BEYOND Radius (no flicker)
-        private const int MaxReal = 400;              // safety cap on simultaneous real items
+        internal static float Radius = 14f;           // materialize settled instances within this 2D distance
+        private const float DemoteHysteresis = 2f;    // demote only once this far BEYOND Radius (no flicker)
+        private const int MaxReal = 600;              // safety cap on simultaneous real items
+        private const int NewPerFrame = 24;           // throttle materializations/frame so a big radius doesn't hitch
+        private const float DemoteVel2 = 0.06f;       // only demote once the item has (nearly) stopped moving
 
-        private static readonly Dictionary<int, TrashItem> _real = new Dictionary<int, TrashItem>();
-        private static readonly int[] _scan = new int[2048];
+        private sealed class Real
+        {
+            public TrashItem Item;
+            public Rigidbody Rb;
+        }
+
+        private static readonly Dictionary<int, Real> _real = new Dictionary<int, Real>();
+        private static readonly int[] _scan = new int[4096];
         private static readonly List<int> _remove = new List<int>();
 
         internal static int RealCount => _real.Count;
@@ -44,7 +52,8 @@ namespace Trashville.Instanced
             foreach (var kv in _real)
             {
                 int idx = kv.Key;
-                TrashItem item = kv.Value;
+                Real real = kv.Value;
+                TrashItem item = real.Item;
                 if (item == null)
                 {
                     // real item gone = the player picked it up (or the game removed it) -> kill virtual.
@@ -58,6 +67,13 @@ namespace Trashville.Instanced
                     float dx = ip.x - pp.x, dz = ip.z - pp.z;
                     if (dx * dx + dz * dz > far2)
                     {
+                        // CRITICAL: only demote an item that has come to REST. A thrown/falling item that
+                        // crosses the radius while airborne must stay real until it lands - otherwise we would
+                        // freeze it as a settled virtual mid-air at the radius edge.
+                        if (real.Rb != null && real.Rb.velocity.sqrMagnitude > DemoteVel2)
+                        {
+                            continue;
+                        }
                         InstancedTrash.Restore(idx, ip, item.transform.rotation);
                         item.DestroyTrash();
                         _remove.Add(idx);
@@ -75,12 +91,14 @@ namespace Trashville.Instanced
             }
 
             // 2) Materialize settled in-range instances that are not real yet (CollectNear skips hidden/dead).
-            if (_real.Count >= MaxReal || InstancedTrash.PrefabId == null)
+            //    Throttled per frame so enabling a large radius ramps up smoothly instead of hitching.
+            if (_real.Count >= MaxReal || !InstancedTrash.Ready)
             {
                 return;
             }
             int found = InstancedTrash.CollectNear(pp, Radius, _scan, _scan.Length);
-            for (int k = 0; k < found && _real.Count < MaxReal; k++)
+            int made = 0;
+            for (int k = 0; k < found && _real.Count < MaxReal && made < NewPerFrame; k++)
             {
                 int idx = _scan[k];
                 if (_real.ContainsKey(idx))
@@ -91,12 +109,16 @@ namespace Trashville.Instanced
                 {
                     Vector3 pos = InstancedTrash.GetPosition(idx);
                     Quaternion rot = InstancedTrash.GetRotation(idx);
-                    TrashItem item = tm.CreateTrashItem(InstancedTrash.PrefabId, pos, rot, Vector3.zero,
+                    TrashItem item = tm.CreateTrashItem(InstancedTrash.GetTypeId(idx), pos, rot, Vector3.zero,
                         System.Guid.NewGuid().ToString(), false);
                     if (item != null)
                     {
+                        InstancedTrash.MarkRealCreated();   // a real Saveable TrashItem now exists -> save guard must sweep
                         InstancedTrash.Hide(idx);
-                        _real[idx] = item;
+                        Rigidbody rb = null;
+                        try { rb = item.GetComponentInChildren<Rigidbody>(); } catch { }
+                        _real[idx] = new Real { Item = item, Rb = rb };
+                        made++;
                     }
                 }
                 catch (Exception e)
@@ -112,12 +134,13 @@ namespace Trashville.Instanced
         {
             foreach (var kv in _real)
             {
-                if (kv.Value != null)
+                TrashItem item = kv.Value != null ? kv.Value.Item : null;
+                if (item != null)
                 {
                     try
                     {
-                        InstancedTrash.Restore(kv.Key, kv.Value.transform.position, kv.Value.transform.rotation);
-                        kv.Value.DestroyTrash();
+                        InstancedTrash.Restore(kv.Key, item.transform.position, item.transform.rotation);
+                        item.DestroyTrash();
                     }
                     catch { InstancedTrash.Kill(kv.Key); }
                 }

@@ -18,7 +18,8 @@ namespace Trashville.SaveGuard
         internal static void ForceClearForSave(string reason)
         {
             TrashSpawner.CancelPending();
-            Trashville.Instanced.Virtualizer.ClearAll();   // destroy any materialized real items (don't persist)
+            Trashville.Instanced.Virtualizer.ClearAll();          // destroy any materialized real items (don't persist)
+            Trashville.Instanced.InstancedTrash.AbortCalibration(); // destroy any in-flight calibration probes (real Saveable items)
 
             // Bypass clones are GameObjects we own and are NOT in tm.trashItems, so DestroyAllTrash misses
             // them - destroy them ourselves on every save/teardown path or 10k objects leak into the session.
@@ -28,13 +29,17 @@ namespace Trashville.SaveGuard
                 CloneRegistry.DestroyAll();
             }
 
-            if (!TrashRegistry.EverSpawned && TrashRegistry.Count == 0)
+            // The instanced path creates real TrashItems (calibration probes + materialized items) WITHOUT ever
+            // touching TrashRegistry, so EverSpawned alone cannot tell us a sweep is unnecessary - OR in the
+            // instanced flag too, or a probe/materialized item could be serialized into the player's save.
+            bool instancedReals = Trashville.Instanced.InstancedTrash.EverMaterialized;
+            if (!TrashRegistry.EverSpawned && TrashRegistry.Count == 0 && !instancedReals)
             {
                 if (clones > 0)
                 {
                     Core.Log?.Warning($"[SaveGuard] {reason}: destroyed {clones} bypass clones.");
                 }
-                return;   // we never created game trash; leave the player's trash alone
+                return;   // we never created game trash via any path; leave the player's trash alone
             }
 
             var tm = TrashSpawner.TrashManagerOrNull();

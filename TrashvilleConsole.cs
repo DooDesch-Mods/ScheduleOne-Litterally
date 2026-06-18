@@ -79,6 +79,7 @@ namespace Trashville
                     case "inst": InstSpawn(p); break;
                     case "instclear": Instanced.Virtualizer.ClearAll(); Instanced.InstancedTrash.Clear(); Log("instanced cleared"); break;
                     case "shadows": Instanced.InstancedTrash.Shadows = Bool(p, 2, !Instanced.InstancedTrash.Shadows); Log($"instanced shadows = {Instanced.InstancedTrash.Shadows}"); break;
+                    case "maxtypes": if (p.Length > 2 && int.TryParse(p[2], out int mt)) { Instanced.InstancedTrash.MaxTypes = Mathf.Clamp(mt, 1, 8); Instanced.Virtualizer.ClearAll(); Instanced.InstancedTrash.Clear(); Instanced.InstancedTrash.ResetPalette(); } Log($"maxTypes = {Instanced.InstancedTrash.MaxTypes} (field cleared + palette reset - respawn to apply)"); break;
                     case "real": Instanced.Virtualizer.Enabled = Bool(p, 2, !Instanced.Virtualizer.Enabled); Log($"virtualizer (materialize near player) = {Instanced.Virtualizer.Enabled}"); break;
                     case "realradius": if (p.Length > 2 && float.TryParse(p[2], NumberStyles.Float, CultureInfo.InvariantCulture, out float rr)) Instanced.Virtualizer.Radius = Mathf.Clamp(rr, 1f, 30f); Log($"realRadius = {Instanced.Virtualizer.Radius}"); break;
                     case "fov": SetFov(p); break;
@@ -187,7 +188,7 @@ namespace Trashville
             var tm = TrashSpawner.TrashManagerOrNull();
             int mgr = tm != null ? TrashSpawner.TrashItemCount(tm) : -1;
             Log($"armed={Preferences.ArmBenchmark} bypass={Preferences.BypassCap} opt={Preferences.OptimizeClones} mode={(Preferences.SpawnKinematic ? "kinematic" : "dynamic")} | " +
-                $"clones={CloneRegistry.Count} awake={CloneRegistry.CountAwake()} instanced={Instanced.InstancedTrash.Count} real={Instanced.Virtualizer.RealCount} virt={Instanced.Virtualizer.Enabled} budget={Preferences.MaxAwakeBudget} gameTrash={TrashRegistry.Count} mgr={mgr} pending={TrashSpawner.Pending} | " +
+                $"clones={CloneRegistry.Count} awake={CloneRegistry.CountAwake()} instanced={Instanced.InstancedTrash.Count} types={Instanced.InstancedTrash.TypeCount} real={Instanced.Virtualizer.RealCount} virt={Instanced.Virtualizer.Enabled} budget={Preferences.MaxAwakeBudget} gameTrash={TrashRegistry.Count} mgr={mgr} pending={TrashSpawner.Pending} | " +
                 $"fps mean={s.MeanFps:F1} min={s.MinFps:F1} frameMs mean={s.MeanMs:F1} p95={s.P95Ms:F1} | " +
                 $"sweep={AblationController.Active} physAB={PhysicsProbe.Active}");
         }
