@@ -38,7 +38,7 @@ namespace Trashville.Instanced
         private sealed class Part
         {
             public Mesh Mesh;
-            public Material Mat;
+            public Material[] Mats;                         // ONE material per submesh; Mats.Length == Mesh.subMeshCount
             public Matrix4x4 Local = Matrix4x4.identity;   // part transform relative to the prefab root
         }
 
@@ -185,23 +185,39 @@ namespace Trashville.Instanced
                     for (int pi = 0; pi < ty.Parts.Length; pi++)
                     {
                         Part part = ty.Parts[pi];
-                        if (part.Mesh == null || part.Mat == null) continue;
+                        if (part.Mesh == null || part.Mats == null || part.Mats.Length == 0) continue;
+                        int subCount = part.Mats.Length;
                         int count = 0;
                         for (int i = ty.Start; i < end; i++)
                         {
                             if (_hidden[i] || _dead[i]) continue;
                             if (planes != null && !Frustum.Contains(planes, _px[i], _py[i], _pz[i], RenderCullMargin)) continue;
-                            if (pi == 0) vis++;   // count each visible instance once
+                            if (pi == 0) vis++;   // count each visible instance once (NOT per submesh)
                             _batch[count++] = Mul(_matrices[i], part.Local);
                             if (count == BatchSize)
                             {
-                                Graphics.DrawMeshInstanced(part.Mesh, 0, part.Mat, _batch, count, null, sc, Shadows, 0);
+                                // The matrix batch is per-mesh; draw EVERY submesh of the mesh with its own
+                                // material (DrawMeshInstanced defaults to submesh 0, which is why multi-submesh
+                                // meshes - glass body, can exterior+label, cup handle - used to vanish). All
+                                // submeshes consume _batch BEFORE the next refill resets count, so reuse is safe
+                                // (DrawMeshInstanced copies the matrices synchronously). NOTE: instanced
+                                // transparent submeshes are not per-instance depth-sorted (cosmetic; the real
+                                // near renderer covers close-up correctness).
+                                for (int s = 0; s < subCount; s++)
+                                {
+                                    Material m = part.Mats[s]; if (m == null) continue;
+                                    Graphics.DrawMeshInstanced(part.Mesh, s, m, _batch, count, null, sc, Shadows, 0);
+                                }
                                 count = 0;
                             }
                         }
                         if (count > 0)
                         {
-                            Graphics.DrawMeshInstanced(part.Mesh, 0, part.Mat, _batch, count, null, sc, Shadows, 0);
+                            for (int s = 0; s < subCount; s++)
+                            {
+                                Material m = part.Mats[s]; if (m == null) continue;
+                                Graphics.DrawMeshInstanced(part.Mesh, s, m, _batch, count, null, sc, Shadows, 0);
+                            }
                         }
                     }
                 }
@@ -495,6 +511,7 @@ namespace Trashville.Instanced
                 if (_types != null && _types.Length == 1 && _types[0].Id == OnlyType) return true;
                 TType only = BuildType(tm, OnlyType, 1f);
                 if (only == null) { Core.Log?.Warning($"[inst] onlytype '{OnlyType}' has no mesh."); return false; }
+                DestroyPaletteMaterials();
                 _types = new[] { only };
                 Core.Log?.Msg($"[inst] type '{only.Id}' parts={only.Parts.Length} (ONLYTYPE)");
                 return true;
@@ -516,6 +533,7 @@ namespace Trashville.Instanced
             }
             if (built.Count == 0) return false;
 
+            DestroyPaletteMaterials();
             _types = built.ToArray();
             foreach (TType ty in _types)
             {
@@ -566,7 +584,7 @@ namespace Trashville.Instanced
             // LOD0). Deep-check finding: keeping the CHEAPEST LOD dropped glassbottle's label (LOD0 has
             // 'glass bottle label mat', LOD2 the plain mat) and gave energydrink the coarse Interior_LOD1 instead
             // of Interior LOD0. LOD0 = exactly what the player sees on the real prefab up close.
-            var groups = new Dictionary<string, (MeshFilter mf, Mesh m, Material mat, int lod, int verts)>();
+            var groups = new Dictionary<string, (MeshFilter mf, Mesh m, MeshRenderer mr, int lod, int verts)>();
             for (int j = 0; j < mfs.Length; j++)
             {
                 MeshFilter mf = mfs[j]; if (mf == null) continue;
@@ -577,21 +595,37 @@ namespace Trashville.Instanced
                 int lod = ParseLod(m.name);
                 if (!groups.TryGetValue(baseName, out var cur) || lod < cur.lod || (lod == cur.lod && m.vertexCount > cur.verts))
                 {
-                    groups[baseName] = (mf, m, mr.sharedMaterial, lod, m.vertexCount);
+                    groups[baseName] = (mf, m, mr, lod, m.vertexCount);
                 }
             }
             if (groups.Count == 0) return null;
 
+            // One Part per chosen mesh, with ONE cloned material PER SUBMESH (mesh.subMeshCount). A multi-submesh
+            // mesh (glass label+body, can interior+exterior+label, cup wall+handle, cig lid+main) must draw every
+            // submesh with its own material - drawing only submesh 0 is what made parts disappear.
             var parts = new List<Part>(groups.Count);
             foreach (var kv in groups)
             {
                 var grp = kv.Value;
-                Material mat = new Material(grp.mat);
-                mat.enableInstancing = true;
+                Mesh mesh = grp.m;
+                int subCount = Mathf.Max(1, mesh.subMeshCount);
+                Il2CppArrayBase<Material> src = null;
+                try { src = grp.mr.sharedMaterials; } catch { }
+                int srcLen = src != null ? src.Length : 0;
+                var mats = new Material[subCount];
+                for (int s = 0; s < subCount; s++)
+                {
+                    Material srcMat = null;
+                    if (srcLen > 0) srcMat = src[s < srcLen ? s : srcLen - 1];   // clamp: more submeshes than mats -> reuse last (Unity behaviour)
+                    if (srcMat == null) srcMat = grp.mr.sharedMaterial;          // never-null fallback
+                    Material clone = new Material(srcMat);
+                    clone.enableInstancing = true;
+                    mats[s] = clone;
+                }
                 parts.Add(new Part
                 {
-                    Mesh = grp.m,
-                    Mat = mat,
+                    Mesh = mesh,
+                    Mats = mats,
                     Local = worldToRoot * grp.mf.transform.localToWorldMatrix,
                 });
             }
@@ -649,22 +683,46 @@ namespace Trashville.Instanced
                     var names = new string[t.Parts.Length];
                     for (int q = 0; q < t.Parts.Length; q++) names[q] = t.Parts[q].Mesh != null ? t.Parts[q].Mesh.name : "?";
                     picked = string.Join(" + ", names);
+                    // this inspection-only TType is discarded; free its cloned submesh materials so repeated
+                    // meshdiag calls don't leak.
+                    foreach (var p in t.Parts)
+                        if (p != null && p.Mats != null)
+                            foreach (var mm in p.Mats) if (mm != null) try { UnityEngine.Object.Destroy(mm); } catch { }
                 }
-                Core.Log?.Msg($"[meshdiag] '{pe.id}': {(mfs == null ? 0 : mfs.Length)} meshfilters -> instancer renders [{picked}]");
-                if (mfs == null) continue;
-                for (int j = 0; j < mfs.Length; j++)
+                // Scan ALL renderers (not just MeshFilters) so a SkinnedMeshRenderer body (which our MeshFilter-only
+                // instancer would miss) shows up - and report each material's render queue / surface type so a
+                // transparent glass material (which DrawMeshInstanced renders wrong) is obvious.
+                Il2CppArrayBase<Renderer> rends = go.GetComponentsInChildren<Renderer>(true);
+                Core.Log?.Msg($"[meshdiag] '{pe.id}': {(mfs == null ? 0 : mfs.Length)} meshfilters, {(rends == null ? 0 : rends.Length)} renderers -> instancer renders [{picked}]");
+                if (rends == null) continue;
+                for (int j = 0; j < rends.Length; j++)
                 {
-                    MeshFilter mf = mfs[j]; if (mf == null) continue;
-                    Mesh m = mf.sharedMesh;
-                    MeshRenderer mr = mf.GetComponent<MeshRenderer>();
-                    string mat = "NO-MAT", shader = "?";
-                    if (mr != null && mr.sharedMaterial != null)
+                    Renderer r = rends[j]; if (r == null) continue;
+                    string rtype = "Renderer";
+                    Mesh m = null;
+                    var smr = r.TryCast<SkinnedMeshRenderer>();
+                    if (smr != null) { rtype = "SKINNED"; m = smr.sharedMesh; }
+                    else
                     {
-                        mat = mr.sharedMaterial.name;
-                        try { shader = mr.sharedMaterial.shader != null ? mr.sharedMaterial.shader.name : "null"; } catch { }
+                        var mf = r.GetComponent<MeshFilter>();
+                        if (mf != null) { rtype = "mesh"; m = mf.sharedMesh; }
                     }
-                    Vector3 wb = m != null ? Vector3.Scale(m.bounds.size, mf.transform.lossyScale) : Vector3.zero;
-                    Core.Log?.Msg($"   [{j}] '{(m != null ? m.name : "null")}' verts={(m != null ? m.vertexCount : 0)} size=({wb.x:F2},{wb.y:F2},{wb.z:F2}) mat='{mat}' shader='{shader}'");
+                    Vector3 wb = m != null ? Vector3.Scale(m.bounds.size, r.transform.lossyScale) : Vector3.zero;
+                    Core.Log?.Msg($"   [{j}] {rtype} '{(m != null ? m.name : "null")}' verts={(m != null ? m.vertexCount : 0)} size=({wb.x:F2},{wb.y:F2},{wb.z:F2}) enabled={r.enabled}");
+                    Il2CppArrayBase<Material> mats = null;
+                    try { mats = r.sharedMaterials; } catch { }
+                    if (mats == null) continue;
+                    for (int s = 0; s < mats.Length; s++)
+                    {
+                        Material mat = mats[s]; if (mat == null) { Core.Log?.Msg($"        submat[{s}] NULL"); continue; }
+                        string shader = "?"; int q = -1; float surf = -1f; bool twoSided = false;
+                        try { shader = mat.shader != null ? mat.shader.name : "null"; } catch { }
+                        try { q = mat.renderQueue; } catch { }
+                        try { if (mat.HasProperty("_Surface")) surf = mat.GetFloat("_Surface"); } catch { }
+                        try { if (mat.HasProperty("_Cull")) twoSided = mat.GetFloat("_Cull") == 0f; } catch { }
+                        string kind = (q >= 2900 || surf == 1f) ? "TRANSPARENT" : "opaque";
+                        Core.Log?.Msg($"        submat[{s}] '{mat.name}' shader='{shader}' queue={q} surface={surf} {kind}{(twoSided ? " TWO-SIDED" : "")}");
+                    }
                 }
             }
         }
@@ -683,8 +741,26 @@ namespace Trashville.Instanced
 
         internal static void ResetPalette()
         {
+            DestroyPaletteMaterials();
             _types = null;
             _groundCache.Clear();
+        }
+
+        // Each Part now owns subMeshCount cloned materials; destroy them before dropping _types so repeated
+        // palette rebuilds (tv maxtypes / tv onlytype, and DumpMeshParts which builds-and-discards) don't leak.
+        private static void DestroyPaletteMaterials()
+        {
+            if (_types == null) return;
+            foreach (var ty in _types)
+            {
+                if (ty == null || ty.Parts == null) continue;
+                foreach (var p in ty.Parts)
+                {
+                    if (p == null || p.Mats == null) continue;
+                    foreach (var m in p.Mats)
+                        if (m != null) try { UnityEngine.Object.Destroy(m); } catch { }
+                }
+            }
         }
 
         // =========================================================================================
