@@ -71,6 +71,10 @@ namespace Trashville.Instanced
         private static float[] _qx, _qy, _qz, _qw;   // per-item ROOT rotation (for materialize)
         private static byte[] _type;                 // index into _types
         private static bool[] _settled, _hidden, _dead;
+        // _realized = a real TrashItem has been materialized for this index. Decoupled from _hidden so a materialized
+        // item KEEPS drawing as an instance (no shading swap) while it sits at its rest pose; it is only Hidden once
+        // it actually diverges (gets grabbed/thrown). CollectVisible skips _realized so we never re-materialize it.
+        private static bool[] _realized;
         private static Matrix4x4[] _matrices;        // per-item ROOT matrix; only m13 (world Y) animates during the fall
         private static int _count, _active;
 
@@ -99,6 +103,13 @@ namespace Trashville.Instanced
             Calibration.Reset();
             _pending = false;
         }
+
+        // ----- ground-drift self-test: sample-activate instances as DYNAMIC real items, wait, then measure how far
+        // they moved from their virtual rest pose. Large drift = they were NOT actually resting on the ground. -----
+        internal static bool DriftActive => GroundDrift.Active;
+        internal static void BeginDrift(int count) => GroundDrift.Begin(count);
+        internal static void DriftTick(float dt) => GroundDrift.Tick(dt);
+        internal static void AbortDrift() => GroundDrift.Abort();
 
         // =========================================================================================
         internal static bool Setup(int n, Vector3 center)
@@ -218,6 +229,7 @@ namespace Trashville.Instanced
             _qx = new float[n]; _qy = new float[n]; _qz = new float[n]; _qw = new float[n];
             _type = new byte[n];
             _settled = new bool[n]; _hidden = new bool[n]; _dead = new bool[n];
+            _realized = new bool[n];
             _matrices = new Matrix4x4[n];
 
             AssignTypeRanges(n);
@@ -326,6 +338,14 @@ namespace Trashville.Instanced
         internal static float GetClearance(int i) => (InRange(i) && _types != null) ? _types[_type[i]].Clearance : 0f;
         internal static bool IsSettled(int i) => InRange(i) && _settled[i];
 
+        // Mark/unmark an index as having a live real TrashItem (so CollectVisible won't re-materialize it). Does NOT
+        // touch _hidden, so the instance keeps rendering at its rest pose until the real item actually diverges.
+        internal static void SetRealized(int i, bool v)
+        {
+            if (!InRange(i)) return;
+            _realized[i] = v;
+        }
+
         internal static void Hide(int i)
         {
             if (!InRange(i)) return;
@@ -336,6 +356,7 @@ namespace Trashville.Instanced
         {
             if (!InRange(i)) return;
             _hidden[i] = false;
+            _realized[i] = false;
             _settled[i] = true;
             _px[i] = pos.x; _py[i] = pos.y; _pz[i] = pos.z; _restY[i] = pos.y; _vy[i] = 0f;
             _qx[i] = rot.x; _qy[i] = rot.y; _qz[i] = rot.z; _qw[i] = rot.w;
@@ -347,6 +368,7 @@ namespace Trashville.Instanced
             if (!InRange(i)) return;
             _dead[i] = true;
             _hidden[i] = true;
+            _realized[i] = false;
         }
 
         /// <summary>Up to max SETTLED, non-hidden, non-dead instance indices within radius (2D) of p.</summary>
@@ -357,7 +379,7 @@ namespace Trashville.Instanced
             int n = 0;
             for (int i = 0; i < _count && n < max; i++)
             {
-                if (_dead[i] || _hidden[i] || !_settled[i]) continue;
+                if (_dead[i] || _hidden[i] || _realized[i] || !_settled[i]) continue;
                 float dx = _px[i] - p.x, dz = _pz[i] - p.z;
                 if (dx * dx + dz * dz <= r2) outIdx[n++] = i;
             }
@@ -375,13 +397,13 @@ namespace Trashville.Instanced
             int n = 0;
             for (int i = 0; i < _count && n < max; i++)
             {
-                if (_dead[i] || _hidden[i] || !_settled[i]) continue;
+                if (_dead[i] || _hidden[i] || _realized[i] || !_settled[i]) continue;
                 float dx = _px[i] - backCenter.x, dz = _pz[i] - backCenter.z;
                 if (dx * dx + dz * dz <= br2) outIdx[n++] = i;
             }
             for (int i = 0; i < _count && n < max; i++)
             {
-                if (_dead[i] || _hidden[i] || !_settled[i]) continue;
+                if (_dead[i] || _hidden[i] || _realized[i] || !_settled[i]) continue;
                 float bx = _px[i] - backCenter.x, bz = _pz[i] - backCenter.z;
                 if (bx * bx + bz * bz <= br2) continue;
                 float dx = _px[i] - p.x, dz = _pz[i] - p.z;
@@ -655,7 +677,7 @@ namespace Trashville.Instanced
             Calibration.Reset();
             _px = _pz = _py = _vy = _restY = _qx = _qy = _qz = _qw = null;
             _type = null;
-            _settled = _hidden = _dead = null;
+            _settled = _hidden = _dead = _realized = null;
             _matrices = null;
         }
 
@@ -809,6 +831,136 @@ namespace Trashville.Instanced
                 Active = false;
                 Outstanding = 0;
                 _frames = 0;
+            }
+        }
+
+        // =========================================================================================
+        //  Ground-drift self-test (the "activate a sample, wait 5s, did it move?" check)
+        //  Materializes a sample of instances as DYNAMIC real items at their virtual rest pose, lets physics run for
+        //  a few seconds, then reports how far each drifted: drop>0 = it fell (was floating above the ground),
+        //  drop<0 = it was pushed up (was penetrating), ~0 = it was resting correctly. Restores the field afterwards.
+        // =========================================================================================
+        private static class GroundDrift
+        {
+            private const float WaitSeconds = 5f;
+            private const float SampleRadius = 18f;
+            private const float DriftThreshold = 0.15f;   // total displacement (m) above which it clearly wasn't on the ground
+
+            internal static bool Active { get; private set; }
+
+            private static readonly List<int> _idx = new List<int>();
+            private static readonly List<TrashItem> _items = new List<TrashItem>();
+            private static readonly List<Vector3> _start = new List<Vector3>();
+            private static readonly List<Quaternion> _startRot = new List<Quaternion>();
+            private static readonly int[] _scan = new int[512];
+            private static float _elapsed;
+
+            internal static void Begin(int count)
+            {
+                if (Active) { Core.Log?.Msg("[drift] already running"); return; }
+                var tm = Spawning.TrashSpawner.TrashManagerOrNull();
+                if (tm == null) { Core.Log?.Warning("[drift] no TrashManager"); return; }
+                if (!Spawning.TrashSpawner.TryGetPlayerPosition(out Vector3 pp)) { Core.Log?.Warning("[drift] no player"); return; }
+                if (!Ready || _count <= 0) { Core.Log?.Warning("[drift] no instanced field to sample"); return; }
+
+                _idx.Clear(); _items.Clear(); _start.Clear(); _startRot.Clear(); _elapsed = 0f;
+
+                int found = CollectNear(pp, SampleRadius, _scan, _scan.Length);
+                if (found == 0) { Core.Log?.Warning("[drift] no settled instances within " + SampleRadius + "m"); return; }
+                int want = Mathf.Clamp(count, 1, found);
+                int step = Mathf.Max(1, found / want);   // even spread so the sample isn't all one corner/type
+
+                for (int s = 0; s < found && _idx.Count < want; s += step)
+                {
+                    int i = _scan[s];
+                    string id = GetTypeId(i);
+                    if (string.IsNullOrEmpty(id)) continue;
+                    Vector3 vpos = GetPosition(i);
+                    Quaternion vrot = GetRotation(i);
+                    TrashItem real = null;
+                    try { real = tm.CreateTrashItem(id, vpos, vrot, Vector3.zero, System.Guid.NewGuid().ToString(), false); } // DYNAMIC
+                    catch (Exception e) { Core.Log?.Warning("[drift] spawn failed: " + e.Message); }
+                    if (real == null) continue;
+                    MarkRealCreated();
+                    Hide(i);   // hide the instanced copy so we watch the real dynamic item fall/settle
+                    _idx.Add(i); _items.Add(real); _start.Add(vpos); _startRot.Add(vrot);
+                }
+
+                if (_idx.Count == 0) { Core.Log?.Warning("[drift] no probes materialized"); return; }
+                Active = true;
+                Core.Log?.Msg($"[drift] activated {_idx.Count} DYNAMIC probe(s) within {SampleRadius:F0}m; measuring drift over {WaitSeconds:F0}s...");
+            }
+
+            internal static void Tick(float dt)
+            {
+                if (!Active) return;
+                _elapsed += dt;
+                if (_elapsed < WaitSeconds) return;
+                Measure();
+                Cleanup();
+                Active = false;
+            }
+
+            private static void Measure()
+            {
+                int n = _idx.Count;
+                float sumH = 0f, maxH = 0f, sumDrop = 0f, maxDrop = 0f;
+                int floated = 0, valid = 0;
+                var perType = new Dictionary<string, int[]>();          // id -> [count]
+                var perTypeF = new Dictionary<string, float[]>();        // id -> [sumHoriz, sumDrop, maxAbsDrop]
+                for (int k = 0; k < n; k++)
+                {
+                    TrashItem it = _items[k];
+                    if (it == null) continue;
+                    Vector3 s = _start[k];
+                    Vector3 c;
+                    try { c = it.transform.position; } catch { continue; }
+                    valid++;
+                    float dx = c.x - s.x, dy = c.y - s.y, dz = c.z - s.z;
+                    float h = Mathf.Sqrt(dx * dx + dz * dz);
+                    float drop = -dy;                                    // +down (fell), -up (pushed out of ground)
+                    float total = Mathf.Sqrt(dx * dx + dy * dy + dz * dz);
+                    sumH += h; if (h > maxH) maxH = h;
+                    sumDrop += drop; if (Mathf.Abs(drop) > Mathf.Abs(maxDrop)) maxDrop = drop;
+                    if (total > DriftThreshold) floated++;
+                    string id = GetTypeId(_idx[k]) ?? "?";
+                    if (!perType.ContainsKey(id)) { perType[id] = new int[1]; perTypeF[id] = new float[3]; }
+                    perType[id][0]++;
+                    perTypeF[id][0] += h; perTypeF[id][1] += drop;
+                    if (Mathf.Abs(drop) > Mathf.Abs(perTypeF[id][2])) perTypeF[id][2] = drop;
+                }
+                int d = Math.Max(1, valid);
+                Core.Log?.Msg($"[drift] RESULT n={valid}  moved>{DriftThreshold:F2}m: {floated}/{valid}  " +
+                    $"horiz mean={sumH / d:F3} max={maxH:F3}  vert(drop+) mean={sumDrop / d:F3} max={maxDrop:F3} (m)");
+                foreach (var kv in perType)
+                {
+                    string id = kv.Key; int cnt = kv.Value[0];
+                    float[] f = perTypeF[id];
+                    Core.Log?.Msg($"[drift]   {id}: n={cnt} horiz={f[0] / cnt:F3} drop(mean)={f[1] / cnt:F3} drop(maxAbs)={f[2]:F3}");
+                }
+                Core.Log?.Msg("[drift] read: drop>0 fell (floated above ground); drop<0 pushed up (penetrated); ~0 = resting correctly.");
+            }
+
+            private static void Cleanup()
+            {
+                for (int k = 0; k < _idx.Count; k++)
+                {
+                    TrashItem it = _items[k];
+                    if (it != null)
+                    {
+                        try { it.DestroyTrash(); } catch { }
+                        try { if (it != null) UnityEngine.Object.Destroy(it.gameObject); } catch { }
+                    }
+                    Restore(_idx[k], _start[k], _startRot[k]);   // put the instanced copy back exactly where it was
+                }
+                _idx.Clear(); _items.Clear(); _start.Clear(); _startRot.Clear();
+            }
+
+            internal static void Abort()
+            {
+                Cleanup();
+                Active = false;
+                _elapsed = 0f;
             }
         }
     }

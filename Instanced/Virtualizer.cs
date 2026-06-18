@@ -35,6 +35,7 @@ namespace Trashville.Instanced
         private const int DemoteDelayFrames = 20;   // keep an item real this many frames after it leaves view (anti-churn)
         private const float DemoteVel2 = 0.06f;     // only demote once the item has (nearly) stopped moving
         private const float SettleGraceFrames = 10; // min frames a fresh real item must live before it can demote (settle first)
+        private const float DivergePos2 = 0.0025f;  // (0.05 m)^2: once a materialized item moves this far from its rest pose it has been grabbed/thrown -> reveal its real renderer
 
         // CreateTrashItem PARSES this string as a real System.Guid, so it must be valid GUID format.
         private static string NextId() => System.Guid.NewGuid().ToString();
@@ -51,6 +52,8 @@ namespace Trashville.Instanced
         {
             public TrashItem Item;
             public Rigidbody Rb;
+            public Il2CppArrayBase<Renderer> Rends;   // the real item's renderers (kept OFF while the instanced copy draws it)
+            public bool Diverged;   // true once the item left its rest pose (grabbed/thrown) -> its real renderer is shown, the instance hidden
             public int OutFrames;   // consecutive frames outside the keep-set (hysteresis before demote)
             public int Age;         // frames since materialized (let it settle before it may be frozen back)
         }
@@ -132,6 +135,30 @@ namespace Trashville.Instanced
                 try
                 {
                     Vector3 ip = item.transform.position;
+
+                    // Render-decouple handoff: while the real item rests at its virtual pose the INSTANCED copy draws
+                    // it (identical shading, so merely looking at it never changes its appearance). The instant it
+                    // diverges - grabbed, thrown or shoved - reveal its real renderer and hide the instance so the
+                    // moving item is what you see. Latched: once revealed it stays real until it demotes / is picked up.
+                    if (!real.Diverged)
+                    {
+                        Vector3 vp = InstancedTrash.GetPosition(idx);
+                        float mdx = ip.x - vp.x, mdy = ip.y - vp.y, mdz = ip.z - vp.z;
+                        if ((mdx * mdx + mdy * mdy + mdz * mdz) > DivergePos2 ||
+                            (real.Rb != null && real.Rb.velocity.sqrMagnitude > DemoteVel2))
+                        {
+                            real.Diverged = true;
+                            if (real.Rends != null)
+                            {
+                                for (int r = 0; r < real.Rends.Length; r++)
+                                {
+                                    if (real.Rends[r] != null) real.Rends[r].enabled = true;
+                                }
+                            }
+                            InstancedTrash.Hide(idx);
+                        }
+                    }
+
                     float dxb = ip.x - predCenter.x, dzb = ip.z - predCenter.z;
                     float dxv = ip.x - pp.x, dzv = ip.z - pp.z;
                     bool inKeep = (dxb * dxb + dzb * dzb) <= back2 ||
@@ -191,27 +218,31 @@ namespace Trashville.Instanced
                     if (item != null)
                     {
                         InstancedTrash.MarkRealCreated();   // a real Saveable TrashItem now exists -> save guard must sweep
-                        InstancedTrash.Hide(idx);
-                        // Match the instanced field's shadow setting so there is no shadow-pop on materialize and
-                        // we don't pay an extra shadow pass for hundreds of real items when the field has shadows off.
-                        if (!InstancedTrash.Shadows)
+                        // Render-decouple: claim the index (so it is not re-materialized) but DO NOT hide the instance -
+                        // the real item exists purely for interaction (collider/pickup/throw) with its renderer OFF, so
+                        // the instanced copy keeps providing the visuals at the exact same pose (no shading swap on
+                        // look). The instance is only hidden once the item diverges (see the handoff above).
+                        InstancedTrash.SetRealized(idx, true);
+                        Il2CppArrayBase<Renderer> rends = null;
+                        try
                         {
-                            try
+                            rends = item.GetComponentsInChildren<Renderer>(true);
+                            if (rends != null)
                             {
-                                Il2CppArrayBase<Renderer> rends = item.GetComponentsInChildren<Renderer>(true);
-                                if (rends != null)
+                                for (int r = 0; r < rends.Length; r++)
                                 {
-                                    for (int r = 0; r < rends.Length; r++)
-                                    {
-                                        if (rends[r] != null) rends[r].shadowCastingMode = ShadowCastingMode.Off;
-                                    }
+                                    if (rends[r] == null) continue;
+                                    // Match the instanced field's shadow setting (no shadow-pop on the eventual reveal,
+                                    // and no extra shadow pass while it is hidden).
+                                    if (!InstancedTrash.Shadows) rends[r].shadowCastingMode = ShadowCastingMode.Off;
+                                    rends[r].enabled = false;   // invisible until the item diverges; the instance draws it
                                 }
                             }
-                            catch { }
                         }
+                        catch { }
                         Rigidbody rb = null;
                         try { rb = item.GetComponentInChildren<Rigidbody>(); } catch { }
-                        _real[idx] = new Real { Item = item, Rb = rb, OutFrames = 0, Age = 0 };
+                        _real[idx] = new Real { Item = item, Rb = rb, Rends = rends, Diverged = false, OutFrames = 0, Age = 0 };
                         made++;
                     }
                 }

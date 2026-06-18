@@ -116,6 +116,7 @@ namespace Trashville
             AblationController.Tick();
             PhysicsProbe.Tick();
             Instanced.InstancedTrash.Tick(Time.deltaTime);   // pure-array gravity sim (100k path)
+            Instanced.InstancedTrash.DriftTick(Time.deltaTime); // ground-drift self-test timer (no-op unless armed)
             Instanced.Virtualizer.Tick();                    // materialize near-player instances -> real trash
             Instanced.InstancedTrash.Render();               // GPU-instanced render; no-op until set up
 
