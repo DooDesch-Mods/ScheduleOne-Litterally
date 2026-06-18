@@ -390,6 +390,40 @@ namespace Trashville.Instanced
         // =========================================================================================
 
         /// <summary>world = TRS(pos, rot, 1) * meshLocal, built without any il2cpp interop.</summary>
+        /// <summary>Pure-C# point-in-frustum test against 6 pre-extracted, world-space, normalized planes
+        /// (k*4 = nx,ny,nz,d). margin expands the frustum (metres) so edge items count before they are on screen.
+        /// planes == null => always inside (no-camera fallback).</summary>
+        internal static bool PointInFrustum(float px, float py, float pz, float[] pl, float margin)
+        {
+            if (pl == null) return true;
+            for (int k = 0; k < 6; k++)
+            {
+                int b = k << 2;
+                if (pl[b] * px + pl[b + 1] * py + pl[b + 2] * pz + pl[b + 3] < -margin) return false;
+            }
+            return true;
+        }
+
+        /// <summary>Fill outIdx with up to max SETTLED instance indices that are either within backRadius of p
+        /// (anti-glitch ring behind the player) OR within viewDist AND inside the camera frustum. The 2D distance
+        /// pre-filter means the frustum test only runs on the few thousand instances actually near the player.</summary>
+        internal static int CollectVisible(float[] planes, Vector3 p, float backRadius, float viewDist, float margin, int[] outIdx, int max)
+        {
+            if (_count <= 0 || _px == null) return 0;
+            float br2 = backRadius * backRadius;
+            float vd2 = viewDist * viewDist;
+            int n = 0;
+            for (int i = 0; i < _count && n < max; i++)
+            {
+                if (_dead[i] || _hidden[i] || !_settled[i]) continue;
+                float dx = _px[i] - p.x, dz = _pz[i] - p.z;
+                float d2 = dx * dx + dz * dz;
+                if (d2 <= br2) { outIdx[n++] = i; continue; }
+                if (d2 <= vd2 && PointInFrustum(_px[i], _py[i], _pz[i], planes, margin)) outIdx[n++] = i;
+            }
+            return n;
+        }
+
         private static Matrix4x4 BuildInstanceMatrix(float tx, float ty, float tz,
             float qx, float qy, float qz, float qw, Matrix4x4 meshLocal)
         {
