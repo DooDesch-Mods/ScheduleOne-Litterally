@@ -32,6 +32,7 @@ namespace Trashville.Instanced
 
         internal static bool Shadows = false;
         internal static int MaxTypes = 8;            // runtime-switchable (tv maxtypes N): 1 = single type, 8 = variety
+        internal static string OnlyType = null;      // debug: if set, build the palette with ONLY this type id
 
         // ----- type palette (one render set per distinct mesh PART) -----
         private sealed class Part
@@ -432,16 +433,53 @@ namespace Trashville.Instanced
             return m;
         }
 
+        /// <summary>Ground clearance computed from GEOMETRY (deterministic, no probe-settle noise): how high the
+        /// root must sit so the LOWEST point of the rotated mesh (all parts) just touches the ground.</summary>
+        private static float ComputeClearance(TType ty, Quaternion restRot)
+        {
+            if (ty == null || ty.Parts == null || ty.Parts.Length == 0) return 0.1f;
+            Matrix4x4 rot = Matrix4x4.Rotate(restRot);
+            float minY = float.MaxValue;
+            for (int pi = 0; pi < ty.Parts.Length; pi++)
+            {
+                Part part = ty.Parts[pi];
+                if (part.Mesh == null) continue;
+                Bounds b = part.Mesh.bounds;
+                Matrix4x4 m = rot * part.Local;   // mesh-local -> root -> rotated to the resting orientation
+                Vector3 c = b.center, e = b.extents;
+                for (int sx = -1; sx <= 1; sx += 2)
+                    for (int sy = -1; sy <= 1; sy += 2)
+                        for (int sz = -1; sz <= 1; sz += 2)
+                        {
+                            Vector3 w = m.MultiplyPoint3x4(new Vector3(c.x + sx * e.x, c.y + sy * e.y, c.z + sz * e.z));
+                            if (w.y < minY) minY = w.y;
+                        }
+            }
+            if (minY == float.MaxValue || float.IsNaN(minY)) return 0.1f;
+            return Mathf.Clamp(-minY, -0.2f, 1.0f);
+        }
+
         // =========================================================================================
         //  Palette construction - render EVERY distinct part of the prefab (LOD-deduped by name)
         // =========================================================================================
         private static bool EnsurePalette()
         {
-            int want = Mathf.Clamp(MaxTypes, 1, Palette.Length);
-            if (_types != null && _types.Length == want) return true;
-
             var tm = Spawning.TrashSpawner.TrashManagerOrNull();
             if (tm == null) return false;
+
+            // debug: isolate a single type so we can see exactly how ONE type renders instanced.
+            if (!string.IsNullOrEmpty(OnlyType))
+            {
+                if (_types != null && _types.Length == 1 && _types[0].Id == OnlyType) return true;
+                TType only = BuildType(tm, OnlyType, 1f);
+                if (only == null) { Core.Log?.Warning($"[inst] onlytype '{OnlyType}' has no mesh."); return false; }
+                _types = new[] { only };
+                Core.Log?.Msg($"[inst] type '{only.Id}' parts={only.Parts.Length} (ONLYTYPE)");
+                return true;
+            }
+
+            int want = Mathf.Clamp(MaxTypes, 1, Palette.Length);
+            if (_types != null && _types.Length == want) return true;
 
             var built = new List<TType>(want);
             for (int p = 0; p < Palette.Length && built.Count < want; p++)
@@ -574,9 +612,14 @@ namespace Trashville.Instanced
                     MeshFilter mf = mfs[j]; if (mf == null) continue;
                     Mesh m = mf.sharedMesh;
                     MeshRenderer mr = mf.GetComponent<MeshRenderer>();
-                    string mat = (mr != null && mr.sharedMaterial != null) ? mr.sharedMaterial.name : "NO-MAT";
+                    string mat = "NO-MAT", shader = "?";
+                    if (mr != null && mr.sharedMaterial != null)
+                    {
+                        mat = mr.sharedMaterial.name;
+                        try { shader = mr.sharedMaterial.shader != null ? mr.sharedMaterial.shader.name : "null"; } catch { }
+                    }
                     Vector3 wb = m != null ? Vector3.Scale(m.bounds.size, mf.transform.lossyScale) : Vector3.zero;
-                    Core.Log?.Msg($"   [{j}] '{(m != null ? m.name : "null")}' verts={(m != null ? m.vertexCount : 0)} size=({wb.x:F2},{wb.y:F2},{wb.z:F2}) mat='{mat}'");
+                    Core.Log?.Msg($"   [{j}] '{(m != null ? m.name : "null")}' verts={(m != null ? m.vertexCount : 0)} size=({wb.x:F2},{wb.y:F2},{wb.z:F2}) mat='{mat}' shader='{shader}'");
                 }
             }
         }
@@ -715,8 +758,9 @@ namespace Trashville.Instanced
                 {
                     Transform tr = probe.transform;
                     if (genuine) ty.RestRot = tr.rotation;
-                    Ground g = SampleGround(tr.position.x, tr.position.z, tr.position.y);
-                    ty.Clearance = Mathf.Clamp(tr.position.y - g.Y, -0.3f, 0.6f);
+                    // clearance from geometry (deterministic) instead of the noisy probe height (which sometimes
+                    // clamped high and made the whole type float).
+                    ty.Clearance = ComputeClearance(ty, ty.RestRot);
                     Core.Log?.Msg($"[inst] calibrated '{ty.Id}': clearance={ty.Clearance:F2} rot={(genuine ? tr.rotation.eulerAngles.ToString() : "identity(timeout)")}");
                 }
                 catch (Exception e) { Core.Log?.Warning("[inst] calibrate capture failed for " + ty.Id + ": " + e.Message); }
