@@ -22,10 +22,11 @@ namespace Trashville.Instanced
     {
         internal static bool Enabled = false;
         internal static bool Predict = true;        // anticipate camera turn / player movement and pre-materialize
-        // Collide=true (default): materialize DYNAMIC + raycast onto the real ground -> blocks the player + grounded.
-        // Collide=false (performance): materialize KINEMATIC frozen at the virtual pose -> seamless + cheapest, but
-        // sits at NavMesh height (floats a little) and does NOT collide with the player.
-        internal static bool Collide = true;
+        // Research finding: Schedule I trash never blocks the player (player is a CharacterController; trash
+        // colliders are non-blocking / walkable-through BY DESIGN), so DYNAMIC buys no collision - it only makes
+        // fresh items visibly settle/jiggle. So default = KINEMATIC (frozen at the grounded virtual pose: seamless,
+        // no fall/jiggle, cheapest). 'tv collide on' = DYNAMIC physics (items react/can be shoved) if ever wanted.
+        internal static bool Collide = false;
         internal static float ViewDist = 32f;       // materialize instances this far AHEAD, inside the view frustum
         internal static float BackRadius = 6f;      // ...plus this radius around the player (anti-glitch when turning/backing)
         internal static int MaxReal = 600;          // cap on simultaneous real items - THE perf/range dial (each real item costs ~0.004ms)
