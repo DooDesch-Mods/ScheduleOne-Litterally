@@ -22,7 +22,10 @@ namespace Trashville.Instanced
     {
         internal static bool Enabled = false;
         internal static bool Predict = true;        // anticipate camera turn / player movement and pre-materialize
-        internal static bool RealKinematic = true;  // spawn materialized items kinematic (frozen at the virtual pose = seamless, no fall/jiggle)
+        // Collide=true (default): materialize DYNAMIC + raycast onto the real ground -> blocks the player + grounded.
+        // Collide=false (performance): materialize KINEMATIC frozen at the virtual pose -> seamless + cheapest, but
+        // sits at NavMesh height (floats a little) and does NOT collide with the player.
+        internal static bool Collide = true;
         internal static float ViewDist = 32f;       // materialize instances this far AHEAD, inside the view frustum
         internal static float BackRadius = 6f;      // ...plus this radius around the player (anti-glitch when turning/backing)
         internal static int MaxReal = 600;          // cap on simultaneous real items - THE perf/range dial (each real item costs ~0.004ms)
@@ -177,14 +180,13 @@ namespace Trashville.Instanced
                 }
                 try
                 {
-                    // Spawn at the EXACT virtual pose (already the calibrated NavMesh resting height) and KINEMATIC,
-                    // so the item appears already at rest with NO height jump, fall or jiggle - the virtual->real
-                    // swap is invisible. No raycast (it only threw away the already-correct virtual Y); a cheap
-                    // sequential id instead of Guid.NewGuid() to avoid per-materialize GC.
+                    // The field is already grounded (SampleGround refines NavMesh with a short ground raycast), so
+                    // spawn at the EXACT virtual pose - virtual and real coincide (seamless). Collide => DYNAMIC so
+                    // the colliders block the player; performance mode => KINEMATIC (cheapest, no player collision).
                     Vector3 pos = InstancedTrash.GetPosition(idx);
                     Quaternion rot = InstancedTrash.GetRotation(idx);
                     TrashItem item = tm.CreateTrashItem(InstancedTrash.GetTypeId(idx), pos, rot, Vector3.zero,
-                        NextId(), RealKinematic);
+                        NextId(), !Collide);
                     if (item != null)
                     {
                         InstancedTrash.MarkRealCreated();   // a real Saveable TrashItem now exists -> save guard must sweep

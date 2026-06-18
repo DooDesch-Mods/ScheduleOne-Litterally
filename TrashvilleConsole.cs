@@ -85,7 +85,7 @@ namespace Trashville
                     case "realback": if (p.Length > 2 && float.TryParse(p[2], NumberStyles.Float, CultureInfo.InvariantCulture, out float rb2)) Instanced.Virtualizer.BackRadius = Mathf.Clamp(rb2, 1f, 15f); Log($"realBack (anti-glitch radius) = {Instanced.Virtualizer.BackRadius}"); break;
                     case "realmax": if (p.Length > 2 && int.TryParse(p[2], out int rm)) Instanced.Virtualizer.MaxReal = Mathf.Clamp(rm, 50, 2000); Log($"realMax (max real items - perf/range dial) = {Instanced.Virtualizer.MaxReal}"); break;
                     case "predict": Instanced.Virtualizer.Predict = Bool(p, 2, !Instanced.Virtualizer.Predict); Log($"predict (anticipate turn/movement) = {Instanced.Virtualizer.Predict}"); break;
-                    case "realkin": Instanced.Virtualizer.RealKinematic = Bool(p, 2, !Instanced.Virtualizer.RealKinematic); Log($"realKinematic (materialize frozen at virtual pose) = {Instanced.Virtualizer.RealKinematic}"); break;
+                    case "collide": Instanced.Virtualizer.Collide = Bool(p, 2, !Instanced.Virtualizer.Collide); Log($"collide = {Instanced.Virtualizer.Collide} (ON=grounded+player collision, dynamic; OFF=performance: kinematic, floats, no collision)"); break;
                     case "perframe": if (p.Length > 2 && int.TryParse(p[2], out int pf)) Instanced.Virtualizer.NewPerFrame = Mathf.Clamp(pf, 5, 600); Log($"newPerFrame (materializations/frame) = {Instanced.Virtualizer.NewPerFrame}"); break;
                     case "fov": SetFov(p); break;
                     case "up": MovePlayerUp(p); break;

@@ -28,6 +28,7 @@ namespace Trashville.Instanced
         private const float Gravity = -22f;
         private const float GroundCellSize = 5f;     // navmesh sample cache cell (m) - ground varies slowly; bigger = fewer one-time samples (less spawn hitch)
         private const float NavSampleMaxDist = 25f;  // how far up/down NavMesh.SamplePosition searches
+        private static readonly int GroundRayMask = ~(1 << 10);   // ground-refine raycast: everything EXCEPT the Trash layer (10)
 
         internal static bool Shadows = false;
         internal static int MaxTypes = 8;            // runtime-switchable (tv maxtypes N): 1 = single type, 8 = variety
@@ -339,6 +340,16 @@ namespace Trashville.Instanced
                         Vector3 nrm = hit.normal;
                         if (nrm.sqrMagnitude > 0.01f && nrm.y > 0.3f) g.N = nrm.normalized;
                         g.Hit = true;
+
+                        // NavMesh sits a little ABOVE the visual ground (so trash floats). Refine to the EXACT
+                        // ground with a SHORT downward raycast from just above the NavMesh height: it starts too
+                        // low to hit tree canopies / roofs, so it stays tree-safe while removing the float.
+                        if (Physics.Raycast(new Vector3(x, g.Y + 1.5f, z), Vector3.down,
+                                out RaycastHit rh, 4f, GroundRayMask, QueryTriggerInteraction.Ignore))
+                        {
+                            g.Y = rh.point.y;
+                            if (rh.normal.y > 0.3f) g.N = rh.normal.normalized;
+                        }
                     }
                 }
             }
