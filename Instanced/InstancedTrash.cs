@@ -42,12 +42,20 @@ namespace Trashville.Instanced
             public Matrix4x4 Local = Matrix4x4.identity;   // part transform relative to the prefab root
         }
 
+        // One physics-settled rest captured by dropping a real probe on flat ground: its settled root rotation
+        // plus the exact height its root rested above the ground. Each instance picks one at random (+ random yaw)
+        // so the field looks like real trash that fell - varied stable orientations, flush on the ground, no float.
+        private struct Pose
+        {
+            public Quaternion Rot;
+            public float Clearance;   // root.y - groundY at the physics rest
+        }
+
         private sealed class TType
         {
             public string Id;
             public Part[] Parts;                              // every distinct renderable part of the prefab (LOD-deduped)
-            public Quaternion RestRot = Quaternion.identity; // calibrated resting root rotation on flat ground
-            public float Clearance = 0f;                     // root.y - groundY when resting
+            public Pose[] Poses;                              // K physics-settled rests (replaces single RestRot+Clearance)
             public bool Calibrated;
             public float Weight = 1f;                         // relative share of instances
             public int Start, Len;                            // contiguous instance range [Start, Start+Len)
@@ -268,11 +276,18 @@ namespace Trashville.Instanced
 
                     Ground gnd = SampleGround(x, z, center.y);
                     if (gnd.Hit) navHits++;
-                    float restY = gnd.Y + ty.Clearance;
+
+                    // Pick one physics-settled rest at random + a random yaw about world-up. NO slope tilt: the pose
+                    // already encodes a stable flat-ground rest, and tilting it to the local slope is exactly the
+                    // "perched at an odd angle" look. Yaw about up doesn't change the lowest point, so the captured
+                    // clearance stays exact -> the item sits flush on the ground, like real trash that fell there.
+                    Pose pose = (ty.Poses != null && ty.Poses.Length > 0)
+                        ? ty.Poses[rng.Next(ty.Poses.Length)]
+                        : new Pose { Rot = Quaternion.identity, Clearance = 0.1f };
+                    float restY = gnd.Y + pose.Clearance;
 
                     float yaw = (float)(rng.NextDouble() * 360.0);
-                    Quaternion slope = Quaternion.FromToRotation(Vector3.up, gnd.N);
-                    Quaternion rot = slope * Quaternion.AngleAxis(yaw, Vector3.up) * ty.RestRot;
+                    Quaternion rot = Quaternion.AngleAxis(yaw, Vector3.up) * pose.Rot;
 
                     float fallH = 8f + (float)(rng.NextDouble() * 26.0);
 
@@ -351,7 +366,6 @@ namespace Trashville.Instanced
         internal static Vector3 GetPosition(int i) => InRange(i) ? new Vector3(_px[i], _py[i], _pz[i]) : Vector3.zero;
         internal static Quaternion GetRotation(int i) => InRange(i) ? new Quaternion(_qx[i], _qy[i], _qz[i], _qw[i]) : Quaternion.identity;
         internal static string GetTypeId(int i) => (InRange(i) && _types != null) ? _types[_type[i]].Id : null;
-        internal static float GetClearance(int i) => (InRange(i) && _types != null) ? _types[_type[i]].Clearance : 0f;
         internal static bool IsSettled(int i) => InRange(i) && _settled[i];
 
         // Mark/unmark an index as having a live real TrashItem (so CollectVisible won't re-materialize it). Does NOT
@@ -764,149 +778,205 @@ namespace Trashville.Instanced
         }
 
         // =========================================================================================
-        //  Empirical resting-pose calibration (drop one real probe per uncalibrated type)
+        //  Physics-settled pose bake: per type, drop K real probes on flat ground and capture each settled
+        //  rotation + its exact physics rest height. Baked ONE TYPE AT A TIME (few probes alive, no cross-type
+        //  rolling). Each instance later picks one captured pose at random + a random yaw -> the field looks
+        //  like real trash that fell: varied stable orientations, flush on the ground, never perched/floating.
         // =========================================================================================
         private static class Calibration
         {
-            private const int MinSettleFrames = 45;
-            private const int SettleTimeoutFrames = 220;
+            private const int PosesPerType = 16;        // K probes dropped per type
+            // Wide spacing so a rolling cylinder/bag can NEVER reach a neighbour and settle leaning on it (that
+            // captured a too-high clearance + an unstable pose -> the field then floated/slid). Each probe must
+            // land alone on free flat ground. Low drop keeps roll small; the random START rotation still varies the
+            // captured rest face, so we don't need a high tumble.
+            private const float ProbeSpacing = 4.0f;
+            private const float ProbeDropHeight = 1.0f;
+            private const int MinSettleFrames = 25;     // earliest a probe may be judged settled
+            private const int TypeTimeoutFrames = 150;  // per-type hard cap (force-capture whatever stands)
             private const float SettleVel2 = 0.0025f;
-            private const float MinDescent = 0.4f;
-            private const float ProbeDropHeight = 4.5f;
+            private const float MinDescent = 0.3f;      // must actually have fallen (not spawned inside geometry)
+            private const float FlatNormalY = 0.985f;   // only accept poses settled on ~flat ground (no baked tilt)
 
             internal static bool Active { get; private set; }
-            internal static int Outstanding { get; private set; }
+            internal static int Outstanding { get; private set; }   // types left to bake (startup log)
 
             private static readonly List<TType> _pendingTypes = new List<TType>();
-            private static readonly List<TrashItem> _probes = new List<TrashItem>();
+            private static int _cursor;                 // index of the type currently baking
+            private static int _typeFrames;             // frames since the current type's probes were dropped
+            private static readonly List<TrashItem> _probes = new List<TrashItem>();   // current type's live probes
             private static readonly List<float> _spawnY = new List<float>();
-            private static int _frames;
+            private static readonly List<Pose> _caps = new List<Pose>();               // current type's captured poses
 
             internal static bool Begin(TType[] types)
             {
                 if (Active) return true;
                 _pendingTypes.Clear();
-                _probes.Clear();
-                _spawnY.Clear();
-                _frames = 0;
+                for (int t = 0; t < types.Length; t++)
+                    if (!types[t].Calibrated) _pendingTypes.Add(types[t]);
+                if (_pendingTypes.Count == 0) return false;
 
                 var tm = Spawning.TrashSpawner.TrashManagerOrNull();
                 if (tm == null) return false;
                 if (!Spawning.TrashSpawner.TryGetPlayerPosition(out Vector3 pp)) return false;
 
-                for (int t = 0; t < types.Length; t++)
-                {
-                    if (types[t].Calibrated) continue;
-                    _pendingTypes.Add(types[t]);
-                }
-                if (_pendingTypes.Count == 0) return false;
+                // log if the bake ground is sloped (would tilt poses) so it's visible rather than silent.
+                if (Physics.Raycast(pp + Vector3.up, Vector3.down, out RaycastHit rh, 5f, GroundRayMask, QueryTriggerInteraction.Ignore)
+                    && rh.normal.y < 0.99f)
+                    Core.Log?.Warning($"[inst] calibration ground not flat (normal.y={rh.normal.y:F3}); stand on flat ground for best poses.");
 
-                for (int t = 0; t < _pendingTypes.Count; t++)
+                _cursor = 0;
+                Active = true;
+                Outstanding = _pendingTypes.Count;
+                SpawnProbesFor(_pendingTypes[0]);
+                return true;
+            }
+
+            private static bool SpawnProbesFor(TType ty)
+            {
+                DestroyProbes();
+                _caps.Clear();
+                _typeFrames = 0;
+                var tm = Spawning.TrashSpawner.TrashManagerOrNull();
+                if (tm == null) return false;
+                if (!Spawning.TrashSpawner.TryGetPlayerPosition(out Vector3 pp)) return false;
+
+                for (int k = 0; k < PosesPerType; k++)
                 {
-                    TType ty = _pendingTypes[t];
-                    float a = (float)(t) / Math.Max(1, _pendingTypes.Count) * Mathf.PI * 2f;
-                    float pr = 3f + 0.6f * _pendingTypes.Count;
-                    Vector3 pos = pp + new Vector3(Mathf.Cos(a) * pr, ProbeDropHeight, Mathf.Sin(a) * pr);
+                    int gx = k % 4, gz = k / 4;
+                    Vector3 pos = pp + new Vector3((gx - 1.5f) * ProbeSpacing, ProbeDropHeight, (gz - 1.5f) * ProbeSpacing);
                     TrashItem probe = null;
-                    try
-                    {
-                        probe = tm.CreateTrashItem(ty.Id, pos, UnityEngine.Random.rotation, Vector3.zero,
-                            System.Guid.NewGuid().ToString(), false);
-                    }
+                    try { probe = tm.CreateTrashItem(ty.Id, pos, UnityEngine.Random.rotation, Vector3.zero, System.Guid.NewGuid().ToString(), false); }
                     catch (Exception e) { Core.Log?.Warning("[inst] probe spawn failed for " + ty.Id + ": " + e.Message); }
                     if (probe != null) MarkRealCreated();
                     _probes.Add(probe);
                     _spawnY.Add(pos.y);
                 }
-
-                Active = true;
-                Outstanding = _pendingTypes.Count;
                 return true;
             }
 
             internal static bool Tick()
             {
                 if (!Active) return true;
-                _frames++;
-                bool timeout = _frames >= SettleTimeoutFrames;
+                _typeFrames++;
+                TType ty = _cursor < _pendingTypes.Count ? _pendingTypes[_cursor] : null;
+                if (ty == null) { Finish(); return true; }
 
-                bool allSettled = true;
-                for (int t = 0; t < _pendingTypes.Count; t++)
+                bool timeout = _typeFrames >= TypeTimeoutFrames;
+                bool allDone = true;
+                for (int p = 0; p < _probes.Count; p++)
                 {
-                    TType ty = _pendingTypes[t];
-                    if (ty.Calibrated) continue;
-                    TrashItem probe = _probes[t];
-                    if (probe == null) { ty.Calibrated = true; continue; }
-
+                    TrashItem probe = _probes[p];
+                    if (probe == null) continue;        // already captured (or failed spawn)
                     bool settled = false;
-                    if (_frames >= MinSettleFrames)
+                    if (_typeFrames >= MinSettleFrames)
                     {
                         try
                         {
-                            float descended = _spawnY[t] - probe.transform.position.y;
+                            float descended = _spawnY[p] - probe.transform.position.y;
                             Rigidbody rb = probe.GetComponentInChildren<Rigidbody>();
                             bool slow = rb == null || rb.velocity.sqrMagnitude < SettleVel2;
                             if (descended >= MinDescent && slow) settled = true;
                         }
                         catch { settled = true; }
                     }
-
-                    if (!settled) { allSettled = false; continue; }
-                    Capture(ty, probe, true);
+                    if (!settled) { allDone = false; continue; }
+                    CaptureProbe(ty, probe, false);
+                    DestroyOne(probe);          // destroy NOW - nulling the slot would make DestroyProbes skip it (leak)
+                    _probes[p] = null;
                 }
 
-                if (allSettled || timeout)
+                if (allDone || timeout)
                 {
-                    for (int t = 0; t < _pendingTypes.Count; t++)
-                    {
-                        TType ty = _pendingTypes[t];
-                        if (ty.Calibrated || _probes[t] == null) continue;
-                        bool descended = false;
-                        try { descended = (_spawnY[t] - _probes[t].transform.position.y) >= MinDescent; } catch { }
-                        Capture(ty, _probes[t], descended);
-                    }
-                    DestroyProbes();
-                    Active = false;
-                    Outstanding = 0;
+                    if (timeout)
+                        for (int p = 0; p < _probes.Count; p++)
+                            if (_probes[p] != null) { CaptureProbe(ty, _probes[p], true); DestroyOne(_probes[p]); _probes[p] = null; }
+
+                    FinalizeType(ty);
+                    _cursor++;
+                    if (_cursor < _pendingTypes.Count) { SpawnProbesFor(_pendingTypes[_cursor]); return false; }
+                    Finish();
                     return true;
                 }
                 return false;
             }
 
-            private static void Capture(TType ty, TrashItem probe, bool genuine)
+            // Capture one settled probe: its rotation + the EXACT height its root rested above the ground under it
+            // (physics rest height = where a real item rests = no float, and matches materialized real items). Reject
+            // poses that settled on a slope (unless forced by timeout) so we never bake a tilt into a whole type.
+            private static void CaptureProbe(TType ty, TrashItem probe, bool force)
             {
                 try
                 {
-                    Transform tr = probe.transform;
-                    if (genuine) ty.RestRot = tr.rotation;
-                    // clearance from geometry (deterministic) instead of the noisy probe height (which sometimes
-                    // clamped high and made the whole type float).
-                    ty.Clearance = ComputeClearance(ty, ty.RestRot);
-                    Core.Log?.Msg($"[inst] calibrated '{ty.Id}': clearance={ty.Clearance:F2} rot={(genuine ? tr.rotation.eulerAngles.ToString() : "identity(timeout)")}");
+                    Vector3 rp = probe.transform.position;
+                    float groundY = rp.y, ny = 1f;
+                    if (Physics.Raycast(rp + Vector3.up * 0.6f, Vector3.down, out RaycastHit rh, 3f, GroundRayMask, QueryTriggerInteraction.Ignore))
+                    { groundY = rh.point.y; ny = rh.normal.y; }
+                    if (!force && ny < FlatNormalY) return;   // settled on a slope -> skip (don't bake tilt)
+                    float clr = Mathf.Clamp(rp.y - groundY, -0.3f, 1.2f);
+                    _caps.Add(new Pose { Rot = probe.transform.rotation, Clearance = clr });
                 }
-                catch (Exception e) { Core.Log?.Warning("[inst] calibrate capture failed for " + ty.Id + ": " + e.Message); }
+                catch { }
+            }
+
+            // Dedup near-identical rest faces (same down-face, differing only by yaw which is randomized at runtime),
+            // guarantee >= 1 pose, store on the type.
+            private static void FinalizeType(TType ty)
+            {
+                var poses = new List<Pose>(_caps.Count);
+                for (int i = 0; i < _caps.Count; i++)
+                {
+                    Vector3 down = Quaternion.Inverse(_caps[i].Rot) * Vector3.down;   // local face pointing down (yaw-invariant)
+                    bool dup = false;
+                    for (int j = 0; j < poses.Count; j++)
+                        if (Vector3.Dot(Quaternion.Inverse(poses[j].Rot) * Vector3.down, down) > 0.985f) { dup = true; break; }
+                    if (!dup) poses.Add(_caps[i]);
+                }
+                if (poses.Count == 0)
+                {
+                    // nothing usable (all on slopes / spawns failed) -> upright AABB clearance so the type still
+                    // renders grounded instead of vanishing.
+                    poses.Add(new Pose { Rot = Quaternion.identity, Clearance = ComputeClearance(ty, Quaternion.identity) });
+                }
+                ty.Poses = poses.ToArray();
                 ty.Calibrated = true;
+                Outstanding = Math.Max(0, Outstanding - 1);
+                Core.Log?.Msg($"[inst] calibrated '{ty.Id}': {ty.Poses.Length} settled pose(s) from {_caps.Count} drop(s)" +
+                              (ty.Poses.Length < 4 ? " (low variety - relying on random yaw)" : ""));
+            }
+
+            private static void Finish()
+            {
+                DestroyProbes();
+                _caps.Clear();
+                Active = false;
+                Outstanding = 0;
+                _cursor = 0;
+            }
+
+            private static void DestroyOne(TrashItem pr)
+            {
+                if (pr == null) return;
+                try { pr.DestroyTrash(); } catch { }
+                try { if (pr != null) UnityEngine.Object.Destroy(pr.gameObject); } catch { }
             }
 
             private static void DestroyProbes()
             {
-                for (int t = 0; t < _probes.Count; t++)
-                {
-                    TrashItem p = _probes[t];
-                    if (p == null) continue;
-                    try { p.DestroyTrash(); } catch { }
-                    try { if (p != null) UnityEngine.Object.Destroy(p.gameObject); } catch { }
-                }
+                for (int p = 0; p < _probes.Count; p++) DestroyOne(_probes[p]);
                 _probes.Clear();
-                _pendingTypes.Clear();
+                _spawnY.Clear();
             }
 
             internal static void Reset()
             {
                 DestroyProbes();
+                _caps.Clear();
+                _pendingTypes.Clear();
                 Active = false;
                 Outstanding = 0;
-                _frames = 0;
+                _cursor = 0;
+                _typeFrames = 0;
             }
         }
 
@@ -979,9 +1049,10 @@ namespace Trashville.Instanced
 
             private static void Measure()
             {
+                const float LostDist = 5f;   // moved this far = a dynamic probe rolled off / fell through the world; exclude as an outlier, not a grounding signal
                 int n = _idx.Count;
                 float sumH = 0f, maxH = 0f, sumDrop = 0f, maxDrop = 0f;
-                int floated = 0, valid = 0;
+                int floated = 0, valid = 0, lost = 0;
                 var perType = new Dictionary<string, int[]>();          // id -> [count]
                 var perTypeF = new Dictionary<string, float[]>();        // id -> [sumHoriz, sumDrop, maxAbsDrop]
                 for (int k = 0; k < n; k++)
@@ -991,11 +1062,12 @@ namespace Trashville.Instanced
                     Vector3 s = _start[k];
                     Vector3 c;
                     try { c = it.transform.position; } catch { continue; }
-                    valid++;
                     float dx = c.x - s.x, dy = c.y - s.y, dz = c.z - s.z;
+                    float total = Mathf.Sqrt(dx * dx + dy * dy + dz * dz);
+                    if (total > LostDist) { lost++; continue; }   // fell through the world / rolled away - not a grounding measurement
+                    valid++;
                     float h = Mathf.Sqrt(dx * dx + dz * dz);
                     float drop = -dy;                                    // +down (fell), -up (pushed out of ground)
-                    float total = Mathf.Sqrt(dx * dx + dy * dy + dz * dz);
                     sumH += h; if (h > maxH) maxH = h;
                     sumDrop += drop; if (Mathf.Abs(drop) > Mathf.Abs(maxDrop)) maxDrop = drop;
                     if (total > DriftThreshold) floated++;
@@ -1006,7 +1078,7 @@ namespace Trashville.Instanced
                     if (Mathf.Abs(drop) > Mathf.Abs(perTypeF[id][2])) perTypeF[id][2] = drop;
                 }
                 int d = Math.Max(1, valid);
-                Core.Log?.Msg($"[drift] RESULT n={valid}  moved>{DriftThreshold:F2}m: {floated}/{valid}  " +
+                Core.Log?.Msg($"[drift] RESULT n={valid} (lost {lost})  moved>{DriftThreshold:F2}m: {floated}/{valid}  " +
                     $"horiz mean={sumH / d:F3} max={maxH:F3}  vert(drop+) mean={sumDrop / d:F3} max={maxDrop:F3} (m)");
                 foreach (var kv in perType)
                 {
