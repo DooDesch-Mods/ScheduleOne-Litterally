@@ -92,6 +92,7 @@ namespace Trashville
             }
             PhysicsProbe.Abort("scene unloaded");
             SaveSafety.ForceClearForSave("scene unloaded");
+            Instanced.InstancedTrash.Clear();
             CloneSpawner.Reset();
             TrashSpawner.RestoreLimit();
         }
@@ -115,6 +116,7 @@ namespace Trashville
             AblationController.Tick();
             PhysicsProbe.Tick();
             Instanced.InstancedTrash.Tick(Time.deltaTime);   // pure-array gravity sim (100k path)
+            Instanced.Virtualizer.Tick();                    // materialize near-player instances -> real trash
             Instanced.InstancedTrash.Render();               // GPU-instanced render; no-op until set up
 
             // Crash-resilient heartbeat: after a hard crash, Mods/Trashville/heartbeat.txt holds the

@@ -18,6 +18,7 @@ namespace Trashville.SaveGuard
         internal static void ForceClearForSave(string reason)
         {
             TrashSpawner.CancelPending();
+            Trashville.Instanced.Virtualizer.ClearAll();   // destroy any materialized real items (don't persist)
 
             // Bypass clones are GameObjects we own and are NOT in tm.trashItems, so DestroyAllTrash misses
             // them - destroy them ourselves on every save/teardown path or 10k objects leak into the session.

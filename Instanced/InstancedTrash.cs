@@ -6,35 +6,37 @@ using Il2CppInterop.Runtime.InteropTypes.Arrays;
 namespace Trashville.Instanced
 {
     /// <summary>
-    /// The 100k path: trash as pure DATA (flat float arrays), NO GameObjects. Simple gravity + flat-ground
-    /// physics runs in plain managed C# (no per-item interop in the hot loop); rendering is GPU-instanced via
-    /// Graphics.DrawMeshInstanced (mesh+material lifted from a trash prefab; matrices marshalled as
-    /// Il2CppStructArray&lt;Matrix4x4&gt;). The per-item rotation is baked into the matrix once at spawn;
-    /// each frame only the translation column (m03/m13/m23) is updated for still-falling items.
+    /// The 100k path: trash as pure DATA (flat managed arrays), NO GameObjects. Gravity + flat-ground sim in
+    /// plain C# (no per-item interop in the hot loop); GPU-instanced rendering via Graphics.DrawMeshInstanced
+    /// (matrices marshalled as Il2CppStructArray&lt;Matrix4x4&gt;). To stay 1:1 interactable like base-game
+    /// trash, the Virtualizer MATERIALIZES the few instances near the player into real game TrashItems and
+    /// HIDES their virtual copy (matrix set to zero = invisible); on demote it Restores the virtual at the
+    /// real item's resting pose; on pickup it Kills the virtual permanently.
     /// </summary>
     internal static class InstancedTrash
     {
         private const int BatchSize = 1023;
-        private const float Gravity = -22f;   // a touch stronger than 9.81 so the rain settles faster
+        private const float Gravity = -22f;
 
         private static Mesh _mesh;
         private static Material _mat;
+        private static string _prefabId;            // id of the trash prefab we lifted the mesh from
         private static Il2CppStructArray<Matrix4x4> _batch;
 
-        /// <summary>Shadow casting roughly DOUBLES the render cost (the shadow pass re-renders all 100k).
-        /// Off by default for the 100k path; toggle with `tv shadows on`.</summary>
         internal static bool Shadows = false;
 
-        // Struct-of-arrays state (pure managed floats - the sim never touches an il2cpp object).
-        private static float[] _py, _vy;
-        private static bool[] _settled;
-        private static Matrix4x4[] _matrices;   // blittable struct; rotation+scale+xz baked, y updated per frame
+        // Struct-of-arrays state (pure managed - the sim/scan never touch an il2cpp object).
+        private static float[] _px, _py, _pz, _vy;
+        private static float[] _qx, _qy, _qz, _qw;   // per-item rotation (for materialize + matrix rebuild)
+        private static bool[] _settled, _hidden, _dead;
+        private static Matrix4x4[] _matrices;        // rotation+scale+xz baked; y updated per frame
         private static float _groundY;
         private static int _count, _active;
 
         internal static int Count => _count;
         internal static int Active => _active;
         internal static bool Ready => _mesh != null && _mat != null;
+        internal static string PrefabId => _prefabId;
 
         internal static bool Setup(int n, Vector3 center)
         {
@@ -46,11 +48,13 @@ namespace Trashville.Instanced
             if (n < 0) n = 0;
 
             _groundY = center.y;
-            float radius = Mathf.Clamp((float)Math.Sqrt(n) * 0.22f, 12f, 90f);   // spread wider for bigger N
+            // Spread over a large area so density is realistic (~1/m^2 at 100k) - you walk through a littered
+            // map, not a solid wall, and only a handful are ever within reach to materialize.
+            float radius = Mathf.Clamp((float)Math.Sqrt(n) * 0.5f, 20f, 220f);
 
-            _py = new float[n];
-            _vy = new float[n];
-            _settled = new bool[n];
+            _px = new float[n]; _py = new float[n]; _pz = new float[n]; _vy = new float[n];
+            _qx = new float[n]; _qy = new float[n]; _qz = new float[n]; _qw = new float[n];
+            _settled = new bool[n]; _hidden = new bool[n]; _dead = new bool[n];
             _matrices = new Matrix4x4[n];
 
             var rng = new System.Random(12345);
@@ -60,11 +64,19 @@ namespace Trashville.Instanced
                 double r = Math.Sqrt(rng.NextDouble()) * radius;
                 float x = center.x + (float)(Math.Cos(ang) * r);
                 float z = center.z + (float)(Math.Sin(ang) * r);
-                float y = center.y + 18f + (float)(rng.NextDouble() * 40.0);   // rain column
-                _py[i] = y;
-                _vy[i] = 0f;
-                _settled[i] = false;
-                _matrices[i] = BuildMatrix(rng, x, y, z);   // pure C#, no interop
+                float y = center.y + 14f + (float)(rng.NextDouble() * 30.0);
+
+                // uniform random quaternion (pure C#)
+                double u1 = rng.NextDouble(), u2 = rng.NextDouble(), u3 = rng.NextDouble();
+                double s1 = Math.Sqrt(1.0 - u1), s2 = Math.Sqrt(u1);
+                float qx = (float)(s1 * Math.Sin(2.0 * Math.PI * u2));
+                float qy = (float)(s1 * Math.Cos(2.0 * Math.PI * u2));
+                float qz = (float)(s2 * Math.Sin(2.0 * Math.PI * u3));
+                float qw = (float)(s2 * Math.Cos(2.0 * Math.PI * u3));
+
+                _px[i] = x; _py[i] = y; _pz[i] = z; _vy[i] = 0f;
+                _qx[i] = qx; _qy[i] = qy; _qz[i] = qz; _qw[i] = qw;
+                _matrices[i] = BuildMatrix(qx, qy, qz, qw, x, y, z);
             }
             _count = n;
             _active = n;
@@ -72,11 +84,10 @@ namespace Trashville.Instanced
             {
                 _batch = new Il2CppStructArray<Matrix4x4>(BatchSize);
             }
-            Core.Log?.Msg($"[inst] {n} falling instances, groundY={_groundY:F1} radius={radius:F0}.");
+            Core.Log?.Msg($"[inst] {n} falling instances, groundY={_groundY:F1} radius={radius:F0} prefab='{_prefabId}'.");
             return true;
         }
 
-        /// <summary>Pure-managed gravity sim for still-falling items; updates each matrix's Y translation.</summary>
         internal static void Tick(float dt)
         {
             if (_active <= 0 || _count <= 0 || dt <= 0f)
@@ -87,7 +98,7 @@ namespace Trashville.Instanced
             int active = 0;
             for (int i = 0; i < _count; i++)
             {
-                if (_settled[i])
+                if (_settled[i] || _hidden[i] || _dead[i])
                 {
                     continue;
                 }
@@ -103,7 +114,7 @@ namespace Trashville.Instanced
                     active++;
                 }
                 _py[i] = y;
-                _matrices[i].m13 = y;   // translation Y column; x/z were baked at spawn (no horizontal motion)
+                _matrices[i].m13 = y;
             }
             _active = active;
         }
@@ -116,6 +127,7 @@ namespace Trashville.Instanced
             }
             try
             {
+                ShadowCastingMode sc = Shadows ? ShadowCastingMode.On : ShadowCastingMode.Off;
                 int i = 0;
                 while (i < _count)
                 {
@@ -124,8 +136,7 @@ namespace Trashville.Instanced
                     {
                         _batch[j] = _matrices[i + j];
                     }
-                    Graphics.DrawMeshInstanced(_mesh, 0, _mat, _batch, batch, null,
-                        Shadows ? ShadowCastingMode.On : ShadowCastingMode.Off, Shadows, 0);
+                    Graphics.DrawMeshInstanced(_mesh, 0, _mat, _batch, batch, null, sc, Shadows, 0);
                     i += batch;
                 }
             }
@@ -136,18 +147,55 @@ namespace Trashville.Instanced
             }
         }
 
-        /// <summary>Build a TRS matrix in pure C# (random uniform rotation, unit scale, translation) so spawning
-        /// 100k items does not make 100k native Matrix4x4.TRS / Random.rotation interop calls.</summary>
-        private static Matrix4x4 BuildMatrix(System.Random rng, float tx, float ty, float tz)
-        {
-            // uniform random quaternion
-            double u1 = rng.NextDouble(), u2 = rng.NextDouble(), u3 = rng.NextDouble();
-            double s1 = Math.Sqrt(1.0 - u1), s2 = Math.Sqrt(u1);
-            float qx = (float)(s1 * Math.Sin(2.0 * Math.PI * u2));
-            float qy = (float)(s1 * Math.Cos(2.0 * Math.PI * u2));
-            float qz = (float)(s2 * Math.Sin(2.0 * Math.PI * u3));
-            float qw = (float)(s2 * Math.Cos(2.0 * Math.PI * u3));
+        // ----- materialization support (used by the Virtualizer) -----
 
+        internal static Vector3 GetPosition(int i) => new Vector3(_px[i], _py[i], _pz[i]);
+        internal static Quaternion GetRotation(int i) => new Quaternion(_qx[i], _qy[i], _qz[i], _qw[i]);
+        internal static bool IsSettled(int i) => _settled[i];
+
+        /// <summary>Materialized -> hide the virtual copy (zero matrix renders nothing).</summary>
+        internal static void Hide(int i)
+        {
+            _hidden[i] = true;
+            _matrices[i] = default;
+        }
+
+        /// <summary>Demoted back to virtual at the real item's resting pose (seamless).</summary>
+        internal static void Restore(int i, Vector3 pos, Quaternion rot)
+        {
+            _hidden[i] = false;
+            _settled[i] = true;
+            _px[i] = pos.x; _py[i] = pos.y; _pz[i] = pos.z;
+            _qx[i] = rot.x; _qy[i] = rot.y; _qz[i] = rot.z; _qw[i] = rot.w;
+            _matrices[i] = BuildMatrix(rot.x, rot.y, rot.z, rot.w, pos.x, pos.y, pos.z);
+        }
+
+        /// <summary>Picked up -> remove the virtual permanently (invisible, never re-materialized).</summary>
+        internal static void Kill(int i)
+        {
+            _dead[i] = true;
+            _hidden[i] = true;
+            _matrices[i] = default;
+        }
+
+        /// <summary>Fill outIdx with up to max SETTLED, non-hidden, non-dead instance indices within radius
+        /// (2D distance) of p. Returns the count.</summary>
+        internal static int CollectNear(Vector3 p, float radius, int[] outIdx, int max)
+        {
+            if (_count <= 0 || _px == null) return 0;
+            float r2 = radius * radius;
+            int n = 0;
+            for (int i = 0; i < _count && n < max; i++)
+            {
+                if (_dead[i] || _hidden[i] || !_settled[i]) continue;
+                float dx = _px[i] - p.x, dz = _pz[i] - p.z;
+                if (dx * dx + dz * dz <= r2) outIdx[n++] = i;
+            }
+            return n;
+        }
+
+        private static Matrix4x4 BuildMatrix(float qx, float qy, float qz, float qw, float tx, float ty, float tz)
+        {
             float xx = qx * qx, yy = qy * qy, zz = qz * qz;
             float xy = qx * qy, xz = qx * qz, yz = qy * qz;
             float wx = qw * qx, wy = qw * qy, wz = qw * qz;
@@ -189,7 +237,6 @@ namespace Trashville.Instanced
                     {
                         continue;
                     }
-                    // Pick the LOWEST-vertex mesh (lowest LOD) - cheapest to render 100k of.
                     Mesh best = null;
                     int bestV = int.MaxValue;
                     for (int j = 0; j < mfs.Length; j++)
@@ -202,9 +249,10 @@ namespace Trashville.Instanced
                     _mesh = best;
                     _mat = new Material(mr.sharedMaterial);
                     _mat.enableInstancing = true;
+                    _prefabId = ti.ID;
                     string shader = "?";
                     try { shader = _mat.shader != null ? _mat.shader.name : "null"; } catch { }
-                    Core.Log?.Msg($"[inst] mesh '{_mesh.name}' verts={_mesh.vertexCount} (lowest of {mfs.Length} LODs) mat='{mr.sharedMaterial.name}' shader='{shader}'");
+                    Core.Log?.Msg($"[inst] mesh '{_mesh.name}' verts={_mesh.vertexCount} mat='{mr.sharedMaterial.name}' shader='{shader}' prefab='{_prefabId}'");
                     return true;
                 }
                 Core.Log?.Warning("[inst] no prefab yielded a MeshFilter+MeshRenderer.");
@@ -220,9 +268,8 @@ namespace Trashville.Instanced
         {
             _count = 0;
             _active = 0;
-            _py = null;
-            _vy = null;
-            _settled = null;
+            _px = _py = _pz = _vy = _qx = _qy = _qz = _qw = null;
+            _settled = _hidden = _dead = null;
             _matrices = null;
         }
     }
