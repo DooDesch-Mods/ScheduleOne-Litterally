@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Rendering;
+using Il2CppInterop.Runtime.InteropTypes.Arrays;
 
 namespace Trashville.Instanced
 {
@@ -19,19 +21,22 @@ namespace Trashville.Instanced
     internal static class Virtualizer
     {
         internal static bool Enabled = false;
-        internal static float ViewDist = 20f;       // materialize instances this far AHEAD, inside the view frustum
-        internal static float BackRadius = 4f;      // ...plus this radius around the player (anti-glitch when turning)
+        internal static float ViewDist = 32f;       // materialize instances this far AHEAD, inside the view frustum
+        internal static float BackRadius = 5f;      // ...plus this radius around the player (anti-glitch when turning)
+        internal static int MaxReal = 600;          // cap on simultaneous real items - THE perf/range dial (each real item costs ~0.004ms)
         private const float Margin = 2.5f;          // frustum expansion (m) so items materialize just before on-screen
         private const int DemoteDelayFrames = 20;   // keep an item real this many frames after it leaves view (anti-churn)
-        private const int MaxReal = 700;            // safety cap on simultaneous real items
-        private const int NewPerFrame = 24;         // throttle materializations/frame so panning never hitches
+        private const int NewPerFrame = 20;         // throttle materializations/frame so panning never hitches
         private const float DemoteVel2 = 0.06f;     // only demote once the item has (nearly) stopped moving
+        private const float SettleGraceFrames = 10; // min frames a fresh real item must live before it can demote (settle first)
+        private static readonly int _groundMask = ~(1 << 10);   // raycast everything EXCEPT the Trash layer (10) for placement
 
         private sealed class Real
         {
             public TrashItem Item;
             public Rigidbody Rb;
             public int OutFrames;   // consecutive frames outside the keep-set (hysteresis before demote)
+            public int Age;         // frames since materialized (let it settle before it may be frozen back)
         }
 
         private static readonly Dictionary<int, Real> _real = new Dictionary<int, Real>();
@@ -53,7 +58,7 @@ namespace Trashville.Instanced
                 return;
             }
 
-            float[] planes = ComputePlanes(Camera.main) ? _planes : null;   // null => no camera: fall back to plain ViewDist radius
+            float[] planes = Frustum.Compute(Camera.main, _planes) ? _planes : null;   // null => no camera: plain ViewDist radius
             float back2 = BackRadius * BackRadius;
             float view2 = ViewDist * ViewDist;
 
@@ -71,12 +76,13 @@ namespace Trashville.Instanced
                     _remove.Add(idx);
                     continue;
                 }
+                real.Age++;
                 try
                 {
                     Vector3 ip = item.transform.position;
                     float dx = ip.x - pp.x, dz = ip.z - pp.z;
                     float d2 = dx * dx + dz * dz;
-                    bool inKeep = d2 <= back2 || (d2 <= view2 && InstancedTrash.PointInFrustum(ip.x, ip.y, ip.z, planes, Margin));
+                    bool inKeep = d2 <= back2 || (d2 <= view2 && Frustum.Contains(planes, ip.x, ip.y, ip.z, Margin));
                     if (inKeep)
                     {
                         real.OutFrames = 0;
@@ -84,8 +90,9 @@ namespace Trashville.Instanced
                     }
                     real.OutFrames++;
                     // CRITICAL: never demote an airborne/thrown item (it would freeze as a settled virtual mid-air);
-                    // and wait a few frames after it leaves view so panning the camera doesn't churn materialize/demote.
-                    if (real.OutFrames >= DemoteDelayFrames &&
+                    // give a fresh item time to settle first; and wait a few frames after it leaves view so panning
+                    // the camera doesn't churn materialize/demote.
+                    if (real.OutFrames >= DemoteDelayFrames && real.Age >= SettleGraceFrames &&
                         (real.Rb == null || real.Rb.velocity.sqrMagnitude <= DemoteVel2))
                     {
                         InstancedTrash.Restore(idx, ip, item.transform.rotation);
@@ -122,15 +129,43 @@ namespace Trashville.Instanced
                 {
                     Vector3 pos = InstancedTrash.GetPosition(idx);
                     Quaternion rot = InstancedTrash.GetRotation(idx);
+                    // Place precisely on the REAL collision ground (raycast, excluding the Trash layer) so the item
+                    // appears already settled instead of dropping/jiggling into place ("fresh fall").
+                    try
+                    {
+                        if (Physics.Raycast(new Vector3(pos.x, pos.y + 1.5f, pos.z), Vector3.down,
+                                out RaycastHit hit, 8f, _groundMask, QueryTriggerInteraction.Ignore))
+                        {
+                            pos.y = hit.point.y + InstancedTrash.GetClearance(idx);
+                        }
+                    }
+                    catch { }
                     TrashItem item = tm.CreateTrashItem(InstancedTrash.GetTypeId(idx), pos, rot, Vector3.zero,
                         System.Guid.NewGuid().ToString(), false);
                     if (item != null)
                     {
                         InstancedTrash.MarkRealCreated();   // a real Saveable TrashItem now exists -> save guard must sweep
                         InstancedTrash.Hide(idx);
+                        // Match the instanced field's shadow setting so there is no shadow-pop on materialize and
+                        // we don't pay an extra shadow pass for hundreds of real items when the field has shadows off.
+                        if (!InstancedTrash.Shadows)
+                        {
+                            try
+                            {
+                                Il2CppArrayBase<Renderer> rends = item.GetComponentsInChildren<Renderer>(true);
+                                if (rends != null)
+                                {
+                                    for (int r = 0; r < rends.Length; r++)
+                                    {
+                                        if (rends[r] != null) rends[r].shadowCastingMode = ShadowCastingMode.Off;
+                                    }
+                                }
+                            }
+                            catch { }
+                        }
                         Rigidbody rb = null;
                         try { rb = item.GetComponentInChildren<Rigidbody>(); } catch { }
-                        _real[idx] = new Real { Item = item, Rb = rb, OutFrames = 0 };
+                        _real[idx] = new Real { Item = item, Rb = rb, OutFrames = 0, Age = 0 };
                         made++;
                     }
                 }
@@ -139,33 +174,6 @@ namespace Trashville.Instanced
                     Core.Log?.Warning("[virt] materialize error: " + e.Message);
                 }
             }
-        }
-
-        /// <summary>Extract the 6 world-space frustum planes from the camera's view-projection (Gribb-Hartmann),
-        /// normalized so Margin is in metres. Pure managed maths off two Matrix4x4 reads - no per-point interop.</summary>
-        private static bool ComputePlanes(Camera cam)
-        {
-            if (cam == null) return false;
-            try
-            {
-                Matrix4x4 m = cam.projectionMatrix * cam.worldToCameraMatrix;
-                SetPlane(0, m.m30 + m.m00, m.m31 + m.m01, m.m32 + m.m02, m.m33 + m.m03); // left
-                SetPlane(1, m.m30 - m.m00, m.m31 - m.m01, m.m32 - m.m02, m.m33 - m.m03); // right
-                SetPlane(2, m.m30 + m.m10, m.m31 + m.m11, m.m32 + m.m12, m.m33 + m.m13); // bottom
-                SetPlane(3, m.m30 - m.m10, m.m31 - m.m11, m.m32 - m.m12, m.m33 - m.m13); // top
-                SetPlane(4, m.m30 + m.m20, m.m31 + m.m21, m.m32 + m.m22, m.m33 + m.m23); // near
-                SetPlane(5, m.m30 - m.m20, m.m31 - m.m21, m.m32 - m.m22, m.m33 - m.m23); // far
-                return true;
-            }
-            catch { return false; }
-        }
-
-        private static void SetPlane(int k, float a, float b, float c, float d)
-        {
-            float len = Mathf.Sqrt(a * a + b * b + c * c);
-            float inv = len > 1e-6f ? 1f / len : 0f;
-            int o = k << 2;
-            _planes[o] = a * inv; _planes[o + 1] = b * inv; _planes[o + 2] = c * inv; _planes[o + 3] = d * inv;
         }
 
         /// <summary>Demote every materialized item back to virtual and destroy the real ones (on clear/save/

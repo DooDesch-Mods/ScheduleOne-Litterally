@@ -15,6 +15,10 @@ namespace Trashville.UI
         private static float _nextRebuild;
         private static GUIStyle _box;
         private static GUIStyle _banner;
+        private static GUIStyle _fps;
+        private static readonly Color _green = new Color(0.40f, 1f, 0.45f);
+        private static readonly Color _yellow = new Color(1f, 0.85f, 0.30f);
+        private static readonly Color _red = new Color(1f, 0.40f, 0.40f);
 
         internal static void Draw()
         {
@@ -24,6 +28,13 @@ namespace Trashville.UI
             }
 
             EnsureStyles();
+
+            // Big, always-visible FPS readout (top-centre), updated every frame from Unity's smoothed frame time
+            // and colour-coded so performance impact is obvious at a glance.
+            float fps = 1f / Mathf.Max(0.0001f, Time.smoothDeltaTime);
+            _fps.normal.textColor = fps >= 50f ? _green : (fps >= 30f ? _yellow : _red);
+            float w = 260f;
+            GUI.Box(new Rect(Screen.width * 0.5f - w * 0.5f, 6f, w, 62f), $"{fps:F0} FPS", _fps);
 
             if (Time.unscaledTime >= _nextRebuild)
             {
@@ -60,6 +71,12 @@ namespace Trashville.UI
                 sb.AppendLine($"trash: ours {TrashRegistry.Count}  manager {mgr}  pending {TrashSpawner.Pending}");
             }
             sb.AppendLine($"GC/1000f: gen0 {PerfSampler.Gc0Per1000Frames():F1}  gen1 {PerfSampler.Gc1Per1000Frames():F1}");
+
+            int inst = Trashville.Instanced.InstancedTrash.Count;
+            if (inst > 0)
+            {
+                sb.AppendLine($"instanced {inst}  drawn {Trashville.Instanced.InstancedTrash.Drawn} (culled)  real {Trashville.Instanced.Virtualizer.RealCount}");
+            }
 
             sb.Append("armed: ").Append(Config.Preferences.ArmBenchmark ? "YES" : "no");
             sb.Append("   mode: ").Append(Config.Preferences.SpawnKinematic ? "KINEMATIC" : "DYNAMIC");
@@ -118,6 +135,13 @@ namespace Trashville.UI
                 fontStyle = FontStyle.Bold,
             };
             _banner.normal.textColor = new Color(1f, 0.55f, 0.55f);
+
+            _fps = new GUIStyle(GUI.skin.box)
+            {
+                alignment = TextAnchor.MiddleCenter,
+                fontSize = 40,
+                fontStyle = FontStyle.Bold,
+            };
         }
     }
 }

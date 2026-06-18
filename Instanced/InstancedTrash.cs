@@ -55,6 +55,9 @@ namespace Trashville.Instanced
 
         private static TType[] _types;
         private static Il2CppStructArray<Matrix4x4> _batch;
+        private static readonly float[] _renderPlanes = new float[24];
+        private const float RenderCullMargin = 4f;   // expand the cull frustum so big/edge items never pop at the screen edge
+        private static int _lastDrawn;               // how many instances were actually drawn last frame (after culling)
 
         // ----- struct-of-arrays instance state (pure managed - the sim/scan never touch an il2cpp object) -----
         private static float[] _px, _pz, _py, _vy, _restY, _baseColY;
@@ -75,6 +78,7 @@ namespace Trashville.Instanced
 
         internal static int Count => _count;
         internal static int Active => _active;
+        internal static int Drawn => _lastDrawn;     // instances actually drawn last frame (after frustum culling)
         internal static int TypeCount => _types != null ? _types.Length : 0;
         internal static bool Ready => _types != null && _types.Length > 0;
 
@@ -180,6 +184,12 @@ namespace Trashville.Instanced
             try
             {
                 ShadowCastingMode sc = Shadows ? ShadowCastingMode.On : ShadowCastingMode.Off;
+                // Unity does NOT frustum-cull DrawMeshInstanced instances - so we do it ourselves. Only instances
+                // inside the view frustum are copied into the batch and drawn; at 100k most of the field is
+                // off-screen every frame, so this is by far the biggest render win. Also skips hidden (materialized)
+                // and dead (picked-up) instances entirely instead of drawing zeroed matrices.
+                float[] planes = Frustum.Compute(UnityEngine.Camera.main, _renderPlanes) ? _renderPlanes : null;
+                int drawn = 0;
                 for (int t = 0; t < _types.Length; t++)
                 {
                     TType ty = _types[t];
@@ -188,18 +198,26 @@ namespace Trashville.Instanced
                         continue;
                     }
                     int end = ty.Start + ty.Len;
-                    int i = ty.Start;
-                    while (i < end)
+                    int count = 0;
+                    for (int i = ty.Start; i < end; i++)
                     {
-                        int batch = Math.Min(BatchSize, end - i);
-                        for (int j = 0; j < batch; j++)
+                        if (_hidden[i] || _dead[i]) continue;
+                        if (planes != null && !Frustum.Contains(planes, _px[i], _py[i], _pz[i], RenderCullMargin)) continue;
+                        _batch[count++] = _matrices[i];
+                        if (count == BatchSize)
                         {
-                            _batch[j] = _matrices[i + j];
+                            Graphics.DrawMeshInstanced(ty.Mesh, 0, ty.Mat, _batch, count, null, sc, Shadows, 0);
+                            drawn += count;
+                            count = 0;
                         }
-                        Graphics.DrawMeshInstanced(ty.Mesh, 0, ty.Mat, _batch, batch, null, sc, Shadows, 0);
-                        i += batch;
+                    }
+                    if (count > 0)
+                    {
+                        Graphics.DrawMeshInstanced(ty.Mesh, 0, ty.Mat, _batch, count, null, sc, Shadows, 0);
+                        drawn += count;
                     }
                 }
+                _lastDrawn = drawn;
             }
             catch (Exception e)
             {
@@ -337,6 +355,7 @@ namespace Trashville.Instanced
         internal static Vector3 GetPosition(int i) => InRange(i) ? new Vector3(_px[i], _py[i], _pz[i]) : Vector3.zero;
         internal static Quaternion GetRotation(int i) => InRange(i) ? new Quaternion(_qx[i], _qy[i], _qz[i], _qw[i]) : Quaternion.identity;
         internal static string GetTypeId(int i) => (InRange(i) && _types != null) ? _types[_type[i]].Id : null;
+        internal static float GetClearance(int i) => (InRange(i) && _types != null) ? _types[_type[i]].Clearance : 0f;
         internal static bool IsSettled(int i) => InRange(i) && _settled[i];
 
         /// <summary>Materialized -> hide the virtual copy (zero matrix renders nothing).</summary>
@@ -390,20 +409,6 @@ namespace Trashville.Instanced
         // =========================================================================================
 
         /// <summary>world = TRS(pos, rot, 1) * meshLocal, built without any il2cpp interop.</summary>
-        /// <summary>Pure-C# point-in-frustum test against 6 pre-extracted, world-space, normalized planes
-        /// (k*4 = nx,ny,nz,d). margin expands the frustum (metres) so edge items count before they are on screen.
-        /// planes == null => always inside (no-camera fallback).</summary>
-        internal static bool PointInFrustum(float px, float py, float pz, float[] pl, float margin)
-        {
-            if (pl == null) return true;
-            for (int k = 0; k < 6; k++)
-            {
-                int b = k << 2;
-                if (pl[b] * px + pl[b + 1] * py + pl[b + 2] * pz + pl[b + 3] < -margin) return false;
-            }
-            return true;
-        }
-
         /// <summary>Fill outIdx with up to max SETTLED instance indices that are either within backRadius of p
         /// (anti-glitch ring behind the player) OR within viewDist AND inside the camera frustum. The 2D distance
         /// pre-filter means the frustum test only runs on the few thousand instances actually near the player.</summary>
@@ -419,7 +424,7 @@ namespace Trashville.Instanced
                 float dx = _px[i] - p.x, dz = _pz[i] - p.z;
                 float d2 = dx * dx + dz * dz;
                 if (d2 <= br2) { outIdx[n++] = i; continue; }
-                if (d2 <= vd2 && PointInFrustum(_px[i], _py[i], _pz[i], planes, margin)) outIdx[n++] = i;
+                if (d2 <= vd2 && Frustum.Contains(planes, _px[i], _py[i], _pz[i], margin)) outIdx[n++] = i;
             }
             return n;
         }
@@ -729,8 +734,15 @@ namespace Trashville.Instanced
                 {
                     Transform tr = probe.transform;
                     if (genuine) ty.RestRot = tr.rotation;   // only ever bake a REAL settled rotation, never mid-air
-                    Ground g = SampleGround(tr.position.x, tr.position.z, tr.position.y);
-                    ty.Clearance = Mathf.Clamp(tr.position.y - g.Y, -0.3f, 0.6f);
+                    // clearance = pivot height above the REAL collision ground (raycast, excluding the Trash layer),
+                    // so the same value can later place a materialized item precisely on the ground with no drop.
+                    float groundY = tr.position.y;
+                    if (Physics.Raycast(new Vector3(tr.position.x, tr.position.y + 1.5f, tr.position.z), Vector3.down,
+                            out RaycastHit gh, 6f, ~(1 << 10), QueryTriggerInteraction.Ignore))
+                    {
+                        groundY = gh.point.y;
+                    }
+                    ty.Clearance = Mathf.Clamp(tr.position.y - groundY, -0.3f, 0.6f);
                     Core.Log?.Msg($"[inst] calibrated '{ty.Id}': clearance={ty.Clearance:F2} rot={(genuine ? tr.rotation.eulerAngles.ToString() : "identity(timeout)")}");
                 }
                 catch (Exception e) { Core.Log?.Warning("[inst] calibrate capture failed for " + ty.Id + ": " + e.Message); }
