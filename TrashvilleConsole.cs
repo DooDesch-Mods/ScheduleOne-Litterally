@@ -84,6 +84,7 @@ namespace Trashville
                     case "realview": case "realradius": if (p.Length > 2 && float.TryParse(p[2], NumberStyles.Float, CultureInfo.InvariantCulture, out float rr)) Instanced.Virtualizer.ViewDist = Mathf.Clamp(rr, 4f, 60f); Log($"realView (in-frustum materialize distance) = {Instanced.Virtualizer.ViewDist}"); break;
                     case "realback": if (p.Length > 2 && float.TryParse(p[2], NumberStyles.Float, CultureInfo.InvariantCulture, out float rb2)) Instanced.Virtualizer.BackRadius = Mathf.Clamp(rb2, 1f, 15f); Log($"realBack (anti-glitch radius) = {Instanced.Virtualizer.BackRadius}"); break;
                     case "realmax": if (p.Length > 2 && int.TryParse(p[2], out int rm)) Instanced.Virtualizer.MaxReal = Mathf.Clamp(rm, 50, 2000); Log($"realMax (max real items - perf/range dial) = {Instanced.Virtualizer.MaxReal}"); break;
+                    case "predict": Instanced.Virtualizer.Predict = Bool(p, 2, !Instanced.Virtualizer.Predict); Log($"predict (anticipate turn/movement) = {Instanced.Virtualizer.Predict}"); break;
                     case "fov": SetFov(p); break;
                     case "up": MovePlayerUp(p); break;
                     case "overview": ApplyFov(90f); MovePlayer(0f, 40f); Log("overview: player +40m, fov 90"); break;

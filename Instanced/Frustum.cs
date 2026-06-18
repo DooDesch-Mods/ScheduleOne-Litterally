@@ -15,18 +15,30 @@ namespace Trashville.Instanced
         internal static bool Compute(Camera cam, float[] planes)
         {
             if (cam == null || planes == null || planes.Length < 24) return false;
-            try
-            {
-                Matrix4x4 m = cam.projectionMatrix * cam.worldToCameraMatrix;
-                Set(planes, 0, m.m30 + m.m00, m.m31 + m.m01, m.m32 + m.m02, m.m33 + m.m03); // left
-                Set(planes, 1, m.m30 - m.m00, m.m31 - m.m01, m.m32 - m.m02, m.m33 - m.m03); // right
-                Set(planes, 2, m.m30 + m.m10, m.m31 + m.m11, m.m32 + m.m12, m.m33 + m.m13); // bottom
-                Set(planes, 3, m.m30 - m.m10, m.m31 - m.m11, m.m32 - m.m12, m.m33 - m.m13); // top
-                Set(planes, 4, m.m30 + m.m20, m.m31 + m.m21, m.m32 + m.m22, m.m33 + m.m23); // near
-                Set(planes, 5, m.m30 - m.m20, m.m31 - m.m21, m.m32 - m.m22, m.m33 - m.m23); // far
-                return true;
-            }
+            try { return ComputeFromVP(cam.projectionMatrix * cam.worldToCameraMatrix, planes); }
             catch { return false; }
+        }
+
+        /// <summary>Extract the 6 world-space frustum planes from an arbitrary view-projection matrix - used to
+        /// build a PREDICTED frustum from an extrapolated camera orientation.</summary>
+        internal static bool ComputeFromVP(Matrix4x4 m, float[] planes)
+        {
+            if (planes == null || planes.Length < 24) return false;
+            Set(planes, 0, m.m30 + m.m00, m.m31 + m.m01, m.m32 + m.m02, m.m33 + m.m03); // left
+            Set(planes, 1, m.m30 - m.m00, m.m31 - m.m01, m.m32 - m.m02, m.m33 - m.m03); // right
+            Set(planes, 2, m.m30 + m.m10, m.m31 + m.m11, m.m32 + m.m12, m.m33 + m.m13); // bottom
+            Set(planes, 3, m.m30 - m.m10, m.m31 - m.m11, m.m32 - m.m12, m.m33 - m.m13); // top
+            Set(planes, 4, m.m30 + m.m20, m.m31 + m.m21, m.m32 + m.m22, m.m33 + m.m23); // near
+            Set(planes, 5, m.m30 - m.m20, m.m31 - m.m21, m.m32 - m.m22, m.m33 - m.m23); // far
+            return true;
+        }
+
+        /// <summary>World view-projection for a camera at pos+rot (Unity convention: looks down -Z) with the given
+        /// projection. Lets us build a predicted frustum without touching the live camera.</summary>
+        internal static Matrix4x4 ViewProjection(Matrix4x4 projection, Vector3 pos, Quaternion rot)
+        {
+            Matrix4x4 view = Matrix4x4.Scale(new Vector3(1f, 1f, -1f)) * Matrix4x4.TRS(pos, rot, Vector3.one).inverse;
+            return projection * view;
         }
 
         private static void Set(float[] pl, int k, float a, float b, float c, float d)

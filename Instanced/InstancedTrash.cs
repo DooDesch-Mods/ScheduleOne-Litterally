@@ -409,22 +409,35 @@ namespace Trashville.Instanced
         // =========================================================================================
 
         /// <summary>world = TRS(pos, rot, 1) * meshLocal, built without any il2cpp interop.</summary>
-        /// <summary>Fill outIdx with up to max SETTLED instance indices that are either within backRadius of p
-        /// (anti-glitch ring behind the player) OR within viewDist AND inside the camera frustum. The 2D distance
-        /// pre-filter means the frustum test only runs on the few thousand instances actually near the player.</summary>
-        internal static int CollectVisible(float[] planes, Vector3 p, float backRadius, float viewDist, float margin, int[] outIdx, int max)
+        /// <summary>Fill outIdx with SETTLED instance indices to materialize, NEAREST/critical first. Pass 1 is
+        /// the anti-glitch ring around the PREDICTED player position backCenter (must be real before the player
+        /// reaches it). Pass 2 is anything inside the current OR predicted (extrapolated-turn) frustum within
+        /// viewDist of p. The 2D pre-filter keeps the frustum tests to the few thousand near instances.</summary>
+        internal static int CollectVisible(float[] cur, float[] pred, Vector3 backCenter, Vector3 p,
+            float backRadius, float viewDist, float margin, int[] outIdx, int max)
         {
             if (_count <= 0 || _px == null) return 0;
             float br2 = backRadius * backRadius;
             float vd2 = viewDist * viewDist;
             int n = 0;
+            // Pass 1: anti-glitch ring (predicted player pos) - PRIORITY, at the front so the per-frame budget
+            // fills it first; collision must exist before the player walks/backs into the item.
             for (int i = 0; i < _count && n < max; i++)
             {
                 if (_dead[i] || _hidden[i] || !_settled[i]) continue;
+                float dx = _px[i] - backCenter.x, dz = _pz[i] - backCenter.z;
+                if (dx * dx + dz * dz <= br2) outIdx[n++] = i;
+            }
+            // Pass 2: inside the current OR predicted frustum, within viewDist of the player.
+            for (int i = 0; i < _count && n < max; i++)
+            {
+                if (_dead[i] || _hidden[i] || !_settled[i]) continue;
+                float bx = _px[i] - backCenter.x, bz = _pz[i] - backCenter.z;
+                if (bx * bx + bz * bz <= br2) continue;   // already taken in pass 1
                 float dx = _px[i] - p.x, dz = _pz[i] - p.z;
-                float d2 = dx * dx + dz * dz;
-                if (d2 <= br2) { outIdx[n++] = i; continue; }
-                if (d2 <= vd2 && Frustum.Contains(planes, _px[i], _py[i], _pz[i], margin)) outIdx[n++] = i;
+                if (dx * dx + dz * dz > vd2) continue;
+                if (Frustum.Contains(cur, _px[i], _py[i], _pz[i], margin) ||
+                    Frustum.Contains(pred, _px[i], _py[i], _pz[i], margin)) outIdx[n++] = i;
             }
             return n;
         }

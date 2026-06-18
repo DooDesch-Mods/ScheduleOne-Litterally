@@ -21,15 +21,24 @@ namespace Trashville.Instanced
     internal static class Virtualizer
     {
         internal static bool Enabled = false;
+        internal static bool Predict = true;        // anticipate camera turn / player movement and pre-materialize
         internal static float ViewDist = 32f;       // materialize instances this far AHEAD, inside the view frustum
-        internal static float BackRadius = 5f;      // ...plus this radius around the player (anti-glitch when turning)
+        internal static float BackRadius = 6f;      // ...plus this radius around the player (anti-glitch when turning/backing)
         internal static int MaxReal = 600;          // cap on simultaneous real items - THE perf/range dial (each real item costs ~0.004ms)
         private const float Margin = 2.5f;          // frustum expansion (m) so items materialize just before on-screen
         private const int DemoteDelayFrames = 20;   // keep an item real this many frames after it leaves view (anti-churn)
-        private const int NewPerFrame = 20;         // throttle materializations/frame so panning never hitches
+        private const int NewPerFrame = 30;         // throttle materializations/frame so panning never hitches
         private const float DemoteVel2 = 0.06f;     // only demote once the item has (nearly) stopped moving
         private const float SettleGraceFrames = 10; // min frames a fresh real item must live before it can demote (settle first)
         private static readonly int _groundMask = ~(1 << 10);   // raycast everything EXCEPT the Trash layer (10) for placement
+
+        // ----- predictive look-ahead (extrapolate camera turn + player movement; clamped so a flick can't over-predict) -----
+        private const float PredictFrames = 9f;     // how many frames ahead to extrapolate
+        private const float MaxPredictAngle = 40f;  // clamp the predicted turn (deg) so an abrupt flick can't sweep the whole map
+        private const float MaxPredictMove = 3.5f;  // clamp the predicted forward displacement (m)
+        private static Vector3 _lastPlayer;
+        private static Quaternion _lastCamRot = Quaternion.identity;
+        private static bool _havePrev;
 
         private sealed class Real
         {
@@ -42,7 +51,8 @@ namespace Trashville.Instanced
         private static readonly Dictionary<int, Real> _real = new Dictionary<int, Real>();
         private static readonly int[] _scan = new int[4096];
         private static readonly List<int> _remove = new List<int>();
-        private static readonly float[] _planes = new float[24];   // 6 world-space frustum planes (nx,ny,nz,d)
+        private static readonly float[] _planes = new float[24];      // current frustum planes
+        private static readonly float[] _predPlanes = new float[24];  // predicted (extrapolated) frustum planes
 
         internal static int RealCount => _real.Count;
 
@@ -58,7 +68,42 @@ namespace Trashville.Instanced
                 return;
             }
 
-            float[] planes = Frustum.Compute(Camera.main, _planes) ? _planes : null;   // null => no camera: plain ViewDist radius
+            Camera cam = Camera.main;
+            float[] cur = Frustum.Compute(cam, _planes) ? _planes : null;   // null => no camera: plain ViewDist radius
+
+            // ----- predictive look-ahead: extrapolate player movement + camera turn (clamped so a flick can't
+            // over-predict and sweep the whole map). The anti-glitch ring is pushed forward into the movement
+            // path; the predicted frustum is rotated toward where the camera is turning, so items "unfreeze"
+            // BEFORE they come into view / before you reach them.
+            Vector3 predCenter = pp;   // predicted player position for the anti-glitch ring
+            float[] pred = cur;        // predicted frustum (defaults to the current frustum)
+            if (Predict && cam != null && _havePrev)
+            {
+                Vector3 move = pp - _lastPlayer;
+                predCenter = pp + Vector3.ClampMagnitude(move * PredictFrames, MaxPredictMove);
+
+                Quaternion curRot = cam.transform.rotation;
+                Quaternion delta = curRot * Quaternion.Inverse(_lastCamRot);
+                delta.ToAngleAxis(out float ang, out Vector3 axis);
+                if (ang > 180f) ang -= 360f;   // shortest arc
+                if (!float.IsNaN(ang) && !float.IsInfinity(axis.x) && Mathf.Abs(ang) > 0.01f)
+                {
+                    float predAng = Mathf.Clamp(ang * PredictFrames, -MaxPredictAngle, MaxPredictAngle);
+                    if (Mathf.Abs(predAng) > 0.5f)
+                    {
+                        Quaternion predRot = Quaternion.AngleAxis(predAng, axis) * curRot;
+                        Matrix4x4 vp = Frustum.ViewProjection(cam.projectionMatrix, cam.transform.position, predRot);
+                        if (Frustum.ComputeFromVP(vp, _predPlanes)) pred = _predPlanes;
+                    }
+                }
+            }
+            if (cam != null)
+            {
+                _lastPlayer = pp;
+                _lastCamRot = cam.transform.rotation;
+                _havePrev = true;
+            }
+
             float back2 = BackRadius * BackRadius;
             float view2 = ViewDist * ViewDist;
 
@@ -80,9 +125,11 @@ namespace Trashville.Instanced
                 try
                 {
                     Vector3 ip = item.transform.position;
-                    float dx = ip.x - pp.x, dz = ip.z - pp.z;
-                    float d2 = dx * dx + dz * dz;
-                    bool inKeep = d2 <= back2 || (d2 <= view2 && Frustum.Contains(planes, ip.x, ip.y, ip.z, Margin));
+                    float dxb = ip.x - predCenter.x, dzb = ip.z - predCenter.z;
+                    float dxv = ip.x - pp.x, dzv = ip.z - pp.z;
+                    bool inKeep = (dxb * dxb + dzb * dzb) <= back2 ||
+                        ((dxv * dxv + dzv * dzv) <= view2 &&
+                         (Frustum.Contains(cur, ip.x, ip.y, ip.z, Margin) || Frustum.Contains(pred, ip.x, ip.y, ip.z, Margin)));
                     if (inKeep)
                     {
                         real.OutFrames = 0;
@@ -116,7 +163,7 @@ namespace Trashville.Instanced
             {
                 return;
             }
-            int found = InstancedTrash.CollectVisible(planes, pp, BackRadius, ViewDist, Margin, _scan, _scan.Length);
+            int found = InstancedTrash.CollectVisible(cur, pred, predCenter, pp, BackRadius, ViewDist, Margin, _scan, _scan.Length);
             int made = 0;
             for (int k = 0; k < found && _real.Count < MaxReal && made < NewPerFrame; k++)
             {
@@ -198,6 +245,7 @@ namespace Trashville.Instanced
                 }
             }
             _real.Clear();
+            _havePrev = false;   // forget last-frame camera/player so a respawn/teleport can't seed a huge prediction delta
         }
     }
 }
