@@ -12,7 +12,7 @@ namespace Trashville.UI
     /// </summary>
     internal static class DebugDraw
     {
-        private static readonly int[] _idx = new int[2048];
+        private static readonly Vector3[] _pos = new Vector3[2048];
 
         internal static void Draw()
         {
@@ -22,9 +22,9 @@ namespace Trashville.UI
 
             if (Config.Preferences.ShowActiveItems)
             {
-                int np = Instanced.Virtualizer.CopyRealIndices(_idx);
+                int np = Instanced.Virtualizer.CopyRealPositions(_pos);
                 DrawDots(cam, np, new Color(0.25f, 1f, 0.35f, 0.95f));   // player-active = green
-                int nc = Spawning.CleanerActor.CopyRealIndices(_idx);
+                int nc = Spawning.CleanerActor.CopyRealPositions(_pos);
                 DrawDots(cam, nc, new Color(0.25f, 0.85f, 1f, 0.95f));   // cleaner-active = cyan
             }
 
@@ -41,7 +41,7 @@ namespace Trashville.UI
             float h = Screen.height;
             for (int k = 0; k < n; k++)
             {
-                Vector3 sp = cam.WorldToScreenPoint(Instanced.InstancedTrash.GetPosition(_idx[k]));
+                Vector3 sp = cam.WorldToScreenPoint(_pos[k]);
                 if (sp.z <= 0f) continue;
                 GUI.DrawTexture(new Rect(sp.x - 3f, h - sp.y - 3f, 6f, 6f), Texture2D.whiteTexture);
             }

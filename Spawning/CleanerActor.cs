@@ -52,6 +52,22 @@ namespace Trashville.Spawning
             return n;
         }
 
+        /// <summary>Copy the CURRENT world position of each cleaner-materialized real item into buf (for a debug
+        /// marker that follows the actual item, not its stale stored pose).</summary>
+        internal static int CopyRealPositions(Vector3[] buf)
+        {
+            if (buf == null) return 0;
+            int n = 0;
+            foreach (var kv in _real)
+            {
+                if (n >= buf.Length) break;
+                TrashItem it = kv.Value != null ? kv.Value.Item : null;
+                if (it == null) continue;
+                try { buf[n++] = it.transform.position; } catch { }
+            }
+            return n;
+        }
+
         internal static void Tick()
         {
             if (!Enabled || InstancedTrash.Count <= 0) return;

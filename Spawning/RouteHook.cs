@@ -96,11 +96,14 @@ namespace Trashville.Spawning
                 // Robustness: if the "settled" item is still well above the ground (early/timeout capture, or the
                 // game placed it kinematic in the air), ground-snap so it can never float. Also a one-shot
                 // diagnostic of the height-above-ground for the first few, to confirm grounding.
-                if (Physics.Raycast(pos + Vector3.up * 0.3f, Vector3.down, out RaycastHit grh, 80f, GroundMask, QueryTriggerInteraction.Ignore))
+                if (Physics.Raycast(pos + Vector3.up * 0.5f, Vector3.down, out RaycastHit grh, 80f, GroundMask, QueryTriggerInteraction.Ignore))
                 {
                     float above = pos.y - grh.point.y;
-                    if (_heightLogged < 10) { _heightLogged++; Core.Log?.Msg($"[route] settled '{id}' {above:F2}m above ground{(above > 0.4f ? " -> ground-snap" : "")}"); }
-                    if (above > 0.4f) groundSnap = true;
+                    // Snap if the item ended up well ABOVE the ground (floating) OR BELOW it (clipped into the
+                    // terrain - it would render fine but the collider/marker sits buried and you can't grab it).
+                    bool off = above > 0.4f || above < -0.1f;
+                    if (_heightLogged < 10) { _heightLogged++; Core.Log?.Msg($"[route] settled '{id}' {above:F2}m vs ground{(off ? " -> ground-snap" : "")}"); }
+                    if (off) groundSnap = true;
                 }
                 int t = InstancedTrash.AddOne(id, pos, rot, groundSnap);
                 if (t == -2) { AtCap++; _tracked.Remove(iid); return; }   // at managed cap -> leave it real
