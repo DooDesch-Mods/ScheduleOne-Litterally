@@ -316,6 +316,32 @@ Log:
   game-spawned `TrashItem` (E6), so a working cleaner treats it identically; the residual is pure base-game
   behaviour. To finally confirm: assign the cleaner to a locker in a normal save and watch it collect.
 
+## 8b. Cleaner approach - external verification (web research + cross-check)
+
+A deep web-research pass (Nexus/Thunderstore/GitHub/wikis, adversarial-verified) plus a cross-check against
+S1API + the actual game decompile confirmed the cleaner approach:
+- **Matches established practice.** Real distributed mods patch the game assembly DIRECTLY via HarmonyX with
+  NO S1API dependency for trash/employee logic: UpgradedTrashCans (patches `Equippable_TrashGrabber`,
+  `TrashContainerItem`, `BagTrashCanBehaviour`), EmployeeTweaks (`Cleaner.AssignProperty`,
+  `Employee.UpdateBehaviour`), Lithium (`Chemist.UpdateBehaviour`), BOSSFramework (NPC-behaviour framework).
+  So our raw-game-assembly access is the norm, not a smell.
+- **S1API has no cleaner/trash-behaviour interface** to use instead (verified in-repo + on the web): its
+  `Trash` wrapper is a thin `CreateTrashItem`/`DestroyAllTrash`/prefab passthrough (no `trashItems`, no
+  `startKinematic`), `EmployeeManager` only wraps appearances, and it hardcodes `TrashItemLimit = 2000`
+  const - independently confirming "never write the limit". So dropping to the game assembly is required.
+- **No prior mod virtualizes trash for cleaners** - our materialize-data-near-cleaner approach is novel
+  (expected: no one else turns trash into data).
+- **Risk the web raised (loose `TrashItem` vs `TrashContainerItem`) - RESOLVED against the current source:**
+  `PickUpTrashBehaviour.TargetTrash` is a `TrashItem` with a public `SetTargetTrash(TrashItem)`
+  (PickUpTrashBehaviour.cs:344/424); `Cleaner.GetTrashContainersOrderedByDistance` (Cleaner.cs:1195) is the
+  SEPARATE bin/bag workflow. So the pickup behaviour targets LOOSE trash items - our materialized items are
+  exactly that. The web's "only containers" claim came from an outdated 3rd-party decompile.
+- **Improvement applied (`efb305b`):** find cleaners via the game's own
+  `EmployeeManager.GetEmployeesByType(EEmployeeType.Cleaner)` registry instead of a `FindObjectsOfType`
+  scene scan (canonical + cheaper; S1API exposes no such list). LIVE-verified.
+- **Fallback ready if a live assigned-cleaner test ever shows native discovery misses our items:** actively
+  feed the nearest materialized item to the cleaner via `PickUpTrashBehaviour.SetTargetTrash` (public).
+
 ## 9. Status (performance mod)
 
 The headline goal is met and reproducible: **~100,000 trash instances on the map at ~49 FPS**, with the
