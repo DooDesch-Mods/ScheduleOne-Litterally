@@ -31,6 +31,7 @@ namespace Trashville
 
         private bool _inWorld;
         private bool _perfApplied;
+        private int _perfLogState = -1;   // last logged perf-layer state (-1 unknown, 0 off-pref, 1 off-MP, 2 active) - dedups the re-arm logs
 #if DEBUG
         private int _frame;
 #endif
@@ -103,7 +104,7 @@ namespace Trashville
                 if (!Preferences.EnablePerformanceLayer)
                 {
                     DisableLayer();
-                    Log.Msg("[Core] Performance layer DISABLED via preferences - running vanilla trash.");
+                    if (_perfLogState != 0) { Log.Msg("[Core] Performance layer DISABLED via preferences - running vanilla trash."); _perfLogState = 0; }
                     return;
                 }
 
@@ -113,7 +114,7 @@ namespace Trashville
                 if (Net.IsMultiplayer() && !Preferences.EnableInMultiplayer)
                 {
                     DisableLayer();
-                    Log.Msg("[Core] Multiplayer session detected - performance layer auto-DISABLED (set EnableInMultiplayer to force it on for testing).");
+                    if (_perfLogState != 1) { Log.Msg("[Core] Multiplayer session detected - performance layer auto-DISABLED (set EnableInMultiplayer to force it on for testing)."); _perfLogState = 1; }
                     return;
                 }
 
@@ -132,7 +133,7 @@ namespace Trashville
                 Instanced.Virtualizer.MaxReal = Preferences.MaxRealItems;
                 Instanced.Virtualizer.ViewDist = Preferences.MaterializeDistance;
 
-                Log.Msg($"[Core] Performance layer ACTIVE (maxReal={Preferences.MaxRealItems}, materializeDist={Preferences.MaterializeDistance}m, trashMult={mult}).");
+                if (_perfLogState != 2) { Log.Msg($"[Core] Performance layer ACTIVE (maxReal={Preferences.MaxRealItems}, materializeDist={Preferences.MaterializeDistance}m, trashMult={mult})."); _perfLogState = 2; }
             }
             catch (Exception e)
             {
