@@ -67,6 +67,16 @@ namespace Trashville.Instanced
 
         internal static int RealCount => _real.Count;
 
+        /// <summary>Copy the instance indices of the items currently materialized near the player into buf; returns
+        /// the count written. For the debug overlay (highlight the active/interactable set). No allocation.</summary>
+        internal static int CopyRealIndices(int[] buf)
+        {
+            if (buf == null) return 0;
+            int n = 0;
+            foreach (var kv in _real) { if (n >= buf.Length) break; buf[n++] = kv.Key; }
+            return n;
+        }
+
         internal static void Tick()
         {
             if (!Enabled || InstancedTrash.Count <= 0)

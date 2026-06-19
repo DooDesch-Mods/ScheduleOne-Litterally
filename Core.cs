@@ -305,7 +305,10 @@ namespace Trashville
 #if DEBUG
             DebugHud.Draw();
 #endif
-            if (_inWorld && Preferences.ShowFpsCounter) UI.FpsCounter.Draw();
+            if (!_inWorld) return;
+            if (Preferences.ShowFpsCounter) UI.FpsCounter.Draw();
+            if (Preferences.ShowStatsPanel) UI.StatsPanel.Draw();
+            if (Preferences.ShowActiveItems || Preferences.ShowRanges) UI.DebugDraw.Draw();
         }
 
         public override void OnApplicationQuit()

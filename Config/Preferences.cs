@@ -23,6 +23,9 @@ namespace Trashville.Config
         private static MelonPreferences_Entry<int> _trashMultiplier;
         private static MelonPreferences_Entry<bool> _activePhysics;
         private static MelonPreferences_Entry<bool> _showFps;
+        private static MelonPreferences_Entry<bool> _showActiveItems;
+        private static MelonPreferences_Entry<bool> _showStatsPanel;
+        private static MelonPreferences_Entry<bool> _showRanges;
 
 #if DEBUG
         private static MelonPreferences_Entry<bool> _arm;
@@ -85,6 +88,15 @@ namespace Trashville.Config
                 "items materialized around you have live physics (they fall/settle and can be shoved). Applies live.");
             _showFps = Create("ShowFpsCounter", false, "Show FPS counter",
                 "Shows a small on-screen FPS readout (top-right). OFF by default. Applies live.");
+            _showActiveItems = Create("ShowActiveItems", false, "Debug: highlight active trash",
+                "Marks the trash items that are currently REAL/interactable around you (green) and around cleaners " +
+                "(cyan), so you can see what the performance layer is materializing. OFF by default. Applies live.");
+            _showStatsPanel = Create("ShowStatsPanel", false, "Debug: live stats panel",
+                "Shows a small on-screen panel with the live performance-layer numbers (trash in field, real items, " +
+                "materialize radius, drawn/total, fps). OFF by default. Applies live.");
+            _showRanges = Create("ShowRanges", false, "Debug: show materialize radius",
+                "Draws a ring on the ground for the materialize radius (and the max distance) around you, so you " +
+                "can see how far trash becomes interactable. OFF by default. Applies live.");
 
 #if DEBUG
             _arm = Create("ArmBenchmark", false, "ARM benchmark (spawns thousands of trash)",
@@ -145,6 +157,9 @@ namespace Trashville.Config
         internal static int TrashMultiplier => Mathf.Clamp(_trashMultiplier?.Value ?? 10, 1, 1000);
         internal static bool ActivePhysics => _activePhysics?.Value ?? false;
         internal static bool ShowFpsCounter => _showFps?.Value ?? false;
+        internal static bool ShowActiveItems => _showActiveItems?.Value ?? false;
+        internal static bool ShowStatsPanel => _showStatsPanel?.Value ?? false;
+        internal static bool ShowRanges => _showRanges?.Value ?? false;
 
 #if DEBUG
         // ----- benchmark accessors (DEBUG only) -----
