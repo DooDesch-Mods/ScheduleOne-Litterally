@@ -273,6 +273,14 @@ Log:
   **Restore round-trip (reload -> 150 restored) is UNVERIFIED:** blocked by a game-relaunch infrastructure
   failure (Steam stopped relaunching the game after repeated reload/crash cycles). The code is sound; the
   restore path (`OnLoadComplete -> SaveBlob.Load -> Clear + ReadBlob`) needs a live reload to confirm.
+- **BLOCKER (game relaunch).** After the Stage-B reload/crash cycle, the game stopped relaunching via Steam
+  (Steam process is up; the game process never starts; no new MelonLoader log appears). This blocks the
+  LIVE verification of every remaining stage. Per fable-mode (verify each stage; do not accumulate
+  unverified work), construction is PAUSED here rather than building C/D/E blind. **To resume:** relaunch
+  Schedule I (or restart Steam) and load the Modding save; then verify in order: (B) reload restores the
+  blob field; (C) build + `gridtest` self-test; (D) cleaner actor; (E) scale to 100k.
+  Verified-and-committed so far: instanced render/pose fixes; game-trash routing; settle-then-virtualize
+  float fix; persistence blob (write LIVE-verified). All evidence in this file + commits up to `08a0a15`.
 
 ## 8. Console surface (for reproduction)
 
