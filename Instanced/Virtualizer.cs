@@ -24,17 +24,25 @@ namespace Trashville.Instanced
         // so trash can always be picked up/thrown out of the box. A no-op when there is no field. (`tv real off`
         // disables it for a pure-render benchmark.)
         internal static bool Enabled = true;
-        internal static bool Predict = true;        // anticipate camera turn / player movement and pre-materialize
         // Research finding: Schedule I trash never blocks the player (player is a CharacterController; trash
         // colliders are non-blocking / walkable-through BY DESIGN), so DYNAMIC buys no collision - it only makes
         // fresh items visibly settle/jiggle. So default = KINEMATIC (frozen at the grounded virtual pose: seamless,
         // no fall/jiggle, cheapest). 'tv collide on' = DYNAMIC physics (items react/can be shoved) if ever wanted.
         internal static bool Collide = false;
-        internal static float ViewDist = 32f;       // materialize instances this far AHEAD, inside the view frustum
-        internal static float BackRadius = 6f;      // ...plus this radius around the player (anti-glitch when turning/backing)
+        internal static float ViewDist = 32f;       // MAX interactable radius (the adaptive _matRadius never grows past this)
         internal static int MaxReal = 600;          // cap on simultaneous real items - THE perf/range dial (each real item costs ~0.004ms)
         internal static int NewPerFrame = 100;      // materializations/frame - cheap now spawns are kinematic; high so the real layer keeps up with movement (no trailing "loading" wave)
-        private const float Margin = 2.5f;          // frustum expansion (m) so items materialize just before on-screen
+
+        // ----- nearest-first interactable set -----
+        // The MaxReal real items are always the instances NEAREST the player (what you can actually reach), not
+        // whatever the camera happens to frame. _matRadius adapts each tick so ~MaxReal instances fall inside it:
+        // it shrinks where trash is dense and grows (up to ViewDist) where it is sparse - so the real items track
+        // the closest trash around the player, 360 degrees, regardless of where the camera looks.
+        internal static float MatRadius => _matRadius;
+        private static float _matRadius = 32f;
+        private const float MinMatRadius = 3f;       // floor for very dense areas
+        private const float RadiusShrink = 0.95f;    // per-tick step when too many instances are in range
+        private const float RadiusGrow = 1.04f;      // per-tick step when there is spare budget
         private const int DemoteDelayFrames = 20;   // keep an item real this many frames after it leaves view (anti-churn)
         private const float DemoteVel2 = 0.06f;     // only demote once the item has (nearly) stopped moving
         private const float SettleGraceFrames = 10; // min frames a fresh real item must live before it can demote (settle first)
@@ -42,14 +50,6 @@ namespace Trashville.Instanced
 
         // CreateTrashItem PARSES this string as a real System.Guid, so it must be valid GUID format.
         private static string NextId() => System.Guid.NewGuid().ToString();
-
-        // ----- predictive look-ahead (extrapolate camera turn + player movement; clamped so a flick can't over-predict) -----
-        private const float PredictFrames = 9f;     // how many frames ahead to extrapolate
-        private const float MaxPredictAngle = 40f;  // clamp the predicted turn (deg) so an abrupt flick can't sweep the whole map
-        private const float MaxPredictMove = 3.5f;  // clamp the predicted forward displacement (m)
-        private static Vector3 _lastPlayer;
-        private static Quaternion _lastCamRot = Quaternion.identity;
-        private static bool _havePrev;
 
         private sealed class Real
         {
@@ -64,8 +64,6 @@ namespace Trashville.Instanced
         private static readonly Dictionary<int, Real> _real = new Dictionary<int, Real>();
         private static readonly int[] _scan = new int[4096];
         private static readonly List<int> _remove = new List<int>();
-        private static readonly float[] _planes = new float[24];      // current frustum planes
-        private static readonly float[] _predPlanes = new float[24];  // predicted (extrapolated) frustum planes
 
         internal static int RealCount => _real.Count;
 
@@ -81,46 +79,13 @@ namespace Trashville.Instanced
                 return;
             }
 
-            Camera cam = Frustum.Cam();
-            float[] cur = Frustum.Compute(cam, _planes) ? _planes : null;   // null => no camera: plain ViewDist radius
+            // Interactable set = the NEAREST instances to the player (so you can always grab/throw the trash right
+            // around you, whatever the camera frames). _matRadius adapts further down so ~MaxReal instances fit.
+            float keepR = _matRadius + 1.5f;   // small hysteresis so an item hovering at the edge doesn't churn
+            float keep2 = keepR * keepR;
 
-            // ----- predictive look-ahead: extrapolate player movement + camera turn (clamped so a flick can't
-            // over-predict and sweep the whole map). The anti-glitch ring is pushed forward into the movement
-            // path; the predicted frustum is rotated toward where the camera is turning, so items "unfreeze"
-            // BEFORE they come into view / before you reach them.
-            Vector3 predCenter = pp;   // predicted player position for the anti-glitch ring
-            float[] pred = cur;        // predicted frustum (defaults to the current frustum)
-            if (Predict && cam != null && _havePrev)
-            {
-                Vector3 move = pp - _lastPlayer;
-                predCenter = pp + Vector3.ClampMagnitude(move * PredictFrames, MaxPredictMove);
-
-                Quaternion curRot = cam.transform.rotation;
-                Quaternion delta = curRot * Quaternion.Inverse(_lastCamRot);
-                delta.ToAngleAxis(out float ang, out Vector3 axis);
-                if (ang > 180f) ang -= 360f;   // shortest arc
-                if (!float.IsNaN(ang) && !float.IsInfinity(axis.x) && Mathf.Abs(ang) > 0.01f)
-                {
-                    float predAng = Mathf.Clamp(ang * PredictFrames, -MaxPredictAngle, MaxPredictAngle);
-                    if (Mathf.Abs(predAng) > 0.5f)
-                    {
-                        Quaternion predRot = Quaternion.AngleAxis(predAng, axis) * curRot;
-                        Matrix4x4 vp = Frustum.ViewProjection(cam.projectionMatrix, cam.transform.position, predRot);
-                        if (Frustum.ComputeFromVP(vp, _predPlanes)) pred = _predPlanes;
-                    }
-                }
-            }
-            if (cam != null)
-            {
-                _lastPlayer = pp;
-                _lastCamRot = cam.transform.rotation;
-                _havePrev = true;
-            }
-
-            float back2 = BackRadius * BackRadius;
-            float view2 = ViewDist * ViewDist;
-
-            // 1) Pickup-detect + demote items that have left the interactable set.
+            // 1) Pickup-detect + demote items that have left the interactable set (now the FARTHEST, since the
+            //    radius tracks the nearest ~MaxReal).
             _remove.Clear();
             foreach (var kv in _real)
             {
@@ -162,20 +127,16 @@ namespace Trashville.Instanced
                         }
                     }
 
-                    float dxb = ip.x - predCenter.x, dzb = ip.z - predCenter.z;
                     float dxv = ip.x - pp.x, dzv = ip.z - pp.z;
-                    bool inKeep = (dxb * dxb + dzb * dzb) <= back2 ||
-                        ((dxv * dxv + dzv * dzv) <= view2 &&
-                         (Frustum.Contains(cur, ip.x, ip.y, ip.z, Margin) || Frustum.Contains(pred, ip.x, ip.y, ip.z, Margin)));
-                    if (inKeep)
+                    if ((dxv * dxv + dzv * dzv) <= keep2)   // still among the nearest -> keep it real
                     {
                         real.OutFrames = 0;
                         continue;
                     }
                     real.OutFrames++;
                     // CRITICAL: never demote an airborne/thrown item (it would freeze as a settled virtual mid-air);
-                    // give a fresh item time to settle first; and wait a few frames after it leaves view so panning
-                    // the camera doesn't churn materialize/demote.
+                    // give a fresh item time to settle first; and wait a few frames after it leaves the radius so a
+                    // small wobble at the edge doesn't churn materialize/demote.
                     if (real.OutFrames >= DemoteDelayFrames && real.Age >= SettleGraceFrames &&
                         (real.Rb == null || real.Rb.velocity.sqrMagnitude <= DemoteVel2))
                     {
@@ -196,11 +157,14 @@ namespace Trashville.Instanced
             }
 
             // 2) Materialize settled in-view (or behind-ring) instances not real yet. Throttled per frame.
-            if (_real.Count >= MaxReal || !InstancedTrash.Ready)
+            if (!InstancedTrash.Ready)
             {
                 return;
             }
-            int found = InstancedTrash.CollectVisible(cur, pred, predCenter, pp, BackRadius, ViewDist, Margin, _scan, _scan.Length);
+            // 2) Materialize the NEAREST not-yet-real instances within the current radius (throttled per frame), and
+            //    count how many settled instances fall in the radius so we can adapt it toward ~MaxReal.
+            int collectMax = _real.Count < MaxReal ? _scan.Length : 0;
+            int found = InstancedTrash.CollectWithinRadius(pp, _matRadius, _scan, collectMax, out int inRadius);
             int made = 0;
             for (int k = 0; k < found && _real.Count < MaxReal && made < NewPerFrame; k++)
             {
@@ -257,6 +221,12 @@ namespace Trashville.Instanced
                     Core.Log?.Warning("[virt] materialize error: " + e.Message);
                 }
             }
+
+            // 3) Adapt the radius so the interactable set stays the NEAREST ~MaxReal instances: shrink where trash
+            //    is dense (over budget), grow (up to ViewDist) where it is sparse. A deadband below MaxReal holds
+            //    the radius steady once it fits (no per-frame random-walk / boundary churn).
+            if (inRadius > MaxReal) _matRadius = Mathf.Max(MinMatRadius, _matRadius * RadiusShrink);
+            else if (inRadius < MaxReal * 0.9f) _matRadius = Mathf.Min(ViewDist, _matRadius * RadiusGrow);
         }
 
         /// <summary>Demote every materialized item back to virtual and destroy the real ones (on clear/save/
@@ -281,7 +251,7 @@ namespace Trashville.Instanced
                 }
             }
             _real.Clear();
-            _havePrev = false;   // forget last-frame camera/player so a respawn/teleport can't seed a huge prediction delta
+            _matRadius = ViewDist;   // reset the adaptive radius so a teleport/respawn re-converges from the max
         }
     }
 }

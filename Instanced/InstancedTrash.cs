@@ -702,6 +702,27 @@ namespace Trashville.Instanced
             return n;
         }
 
+        /// <summary>Counts settled (non-dead, non-hidden) instances within `radius` of p - realized or not - into
+        /// `totalInRadius` (what the Virtualizer's adaptive radius targets toward MaxReal) and collects up to `max`
+        /// of the NOT-yet-real ones into outIdx (materialize candidates). 360 degrees around the player, so the
+        /// interactable set is the nearest trash AROUND you, not just whatever the camera frames.</summary>
+        internal static int CollectWithinRadius(Vector3 p, float radius, int[] outIdx, int max, out int totalInRadius)
+        {
+            totalInRadius = 0;
+            int n = 0;
+            if (_count <= 0 || _px == null) return 0;
+            float r2 = radius * radius;
+            for (int i = 0; i < _count; i++)
+            {
+                if (_dead[i] || _hidden[i] || !_settled[i]) continue;
+                float dx = _px[i] - p.x, dz = _pz[i] - p.z;
+                if (dx * dx + dz * dz > r2) continue;
+                totalInRadius++;
+                if (!_realized[i] && n < max) outIdx[n++] = i;
+            }
+            return n;
+        }
+
         /// <summary>Pass 1 = anti-glitch ring around the PREDICTED player pos backCenter (front of the list, so the
         /// per-frame budget fills it first). Pass 2 = inside the current OR predicted frustum within viewDist.</summary>
         internal static int CollectVisible(float[] cur, float[] pred, Vector3 backCenter, Vector3 p,

@@ -174,7 +174,7 @@ namespace Trashville
                 float minFps = _teleMaxDt > 0f ? 1f / _teleMaxDt : 0f;
                 var tm = GameTrash.TrashManagerOrNull();
                 int mgr = tm != null ? GameTrash.TrashItemCount(tm) : -1;
-                Log.Msg($"[telemetry] fps={meanFps:F0} (min {minFps:F0})  field-live={Instanced.InstancedTrash.LiveCount}  real-player={Instanced.Virtualizer.RealCount}  real-cleaner={Spawning.CleanerActor.RealCount}  mgr={mgr}  absorbed={RouteHook.Absorbed}");
+                Log.Msg($"[telemetry] fps={meanFps:F0} (min {minFps:F0})  field-live={Instanced.InstancedTrash.LiveCount}  real-player={Instanced.Virtualizer.RealCount}  matR={Instanced.Virtualizer.MatRadius:F1}  real-cleaner={Spawning.CleanerActor.RealCount}  mgr={mgr}  absorbed={RouteHook.Absorbed}");
             }
             catch { }
             finally { _teleElapsed = 0f; _teleFrames = 0; _teleMaxDt = 0f; }
