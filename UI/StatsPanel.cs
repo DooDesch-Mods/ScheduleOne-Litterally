@@ -37,7 +37,7 @@ namespace Trashville.UI
                 _label.normal.textColor = Color.white;
             }
 
-            Rect box = new Rect(10f, 70f, 232f, 156f);
+            Rect box = new Rect(10f, 70f, 232f, 174f);
             GUI.color = new Color(0f, 0f, 0f, 0.55f);
             GUI.DrawTexture(box, Texture2D.whiteTexture);
             GUI.color = Color.white;
@@ -57,6 +57,7 @@ namespace Trashville.UI
                    $"drawn        {drawn}\n" +
                    $"real player  {rp}\n" +
                    $"real cleaner {rc}\n" +
+                   $"awake        {Instanced.Virtualizer.AwakeRealCount()}\n" +
                    $"matR         {mr:F1} m\n" +
                    $"absorbed     {Spawning.RouteHook.Absorbed}\n" +
                    $"fps          {Mathf.RoundToInt(_smoothFps)}";

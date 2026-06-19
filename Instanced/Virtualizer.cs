@@ -77,6 +77,20 @@ namespace Trashville.Instanced
             return n;
         }
 
+        /// <summary>How many materialized items have an AWAKE rigidbody right now. With ActivePhysics this is the
+        /// real cost: sleeping bodies are near-free, so this should fall toward ~0 once items settle. (0 when the
+        /// items are kinematic.) For the debug stats panel.</summary>
+        internal static int AwakeRealCount()
+        {
+            int n = 0;
+            foreach (var kv in _real)
+            {
+                Rigidbody rb = kv.Value != null ? kv.Value.Rb : null;
+                if (rb != null) { try { if (!rb.IsSleeping()) n++; } catch { } }
+            }
+            return n;
+        }
+
         internal static void Tick()
         {
             if (!Enabled || InstancedTrash.Count <= 0)
@@ -228,6 +242,21 @@ namespace Trashville.Instanced
                         catch { }
                         Rigidbody rb = null;
                         try { rb = item.GetComponentInChildren<Rigidbody>(); } catch { }
+                        // Sleeping-dynamic (ActivePhysics): keep the body DYNAMIC so it settles + collides (throw a
+                        // can into it and both react), but tune it so a LIGHT trash body actually comes to rest and
+                        // AUTO-SLEEPS instead of jittering forever. A sleeping body is near-free yet still collides
+                        // and wakes on impact - the AAA "render many, simulate few" pattern. maxDepenetrationVelocity
+                        // caps the spawn-overlap push so 200 items materializing in a pile don't explode.
+                        if (showReal && rb != null)
+                        {
+                            try
+                            {
+                                rb.maxDepenetrationVelocity = 3f;
+                                if (rb.angularDrag < 0.5f) rb.angularDrag = 0.5f;
+                                if (rb.drag < 0.1f) rb.drag = 0.1f;
+                            }
+                            catch { }
+                        }
                         _real[idx] = new Real { Item = item, Rb = rb, Rends = rends, Diverged = showReal, OutFrames = 0, Age = 0 };
                         made++;
                     }
