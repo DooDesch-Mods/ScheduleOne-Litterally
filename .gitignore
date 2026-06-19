@@ -5,3 +5,7 @@ obj/
 # IDE
 .vs/
 *.user
+
+# Debug
+Mods/
+
