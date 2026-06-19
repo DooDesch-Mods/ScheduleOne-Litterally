@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using Il2CppScheduleOne.Trash;
 using Il2CppScheduleOne.Employees;
-using Il2CppInterop.Runtime.InteropTypes.Arrays;
+using Il2CppScheduleOne.DevUtilities;
 using Trashville.Instanced;
 
 namespace Trashville.Spawning
@@ -49,17 +49,7 @@ namespace Trashville.Spawning
             if (tm == null) return;
 
             // 1) refind cleaners + rebuild the spatial grid periodically.
-            if (_frame % FindCleanersEvery == 0)
-            {
-                try
-                {
-                    Il2CppArrayBase<Cleaner> arr = UnityEngine.Object.FindObjectsOfType<Cleaner>();
-                    var list = new List<Cleaner>();
-                    if (arr != null) for (int i = 0; i < arr.Length; i++) if (arr[i] != null) list.Add(arr[i]);
-                    _cleaners = list.ToArray();
-                }
-                catch { }
-            }
+            if (_frame % FindCleanersEvery == 0) _cleaners = FindCleaners();
             if (_frame % RebuildEvery == 0) InstancedTrash.BuildGrid();
             _frame++;
 
@@ -118,6 +108,30 @@ namespace Trashville.Spawning
             }
         }
 
+        // Cleaners via the GAME's own employee registry (EmployeeManager.GetEmployeesByType) instead of a
+        // FindObjectsOfType scene scan - the canonical, cheaper way (verified against S1API + the game source;
+        // S1API exposes no cleaner list of its own).
+        private static Cleaner[] FindCleaners()
+        {
+            var list = new List<Cleaner>();
+            try
+            {
+                EmployeeManager em = NetworkSingleton<EmployeeManager>.Instance;
+                if (em != null)
+                {
+                    Il2CppSystem.Collections.Generic.List<Employee> emps = em.GetEmployeesByType(EEmployeeType.Cleaner);
+                    if (emps != null)
+                        for (int i = 0; i < emps.Count; i++)
+                        {
+                            Employee e = emps[i]; if (e == null) continue;
+                            Cleaner cl = e.TryCast<Cleaner>(); if (cl != null) list.Add(cl);
+                        }
+                }
+            }
+            catch (Exception ex) { Core.Log?.Warning("[cleaner] find: " + ex.Message); }
+            return list.ToArray();
+        }
+
         private static bool NearAnyCleaner(Vector3 p)
         {
             for (int c = 0; c < _cleaners.Length; c++)
@@ -148,23 +162,20 @@ namespace Trashville.Spawning
         // Diagnostic: how many cleaners exist, where, and how much DATA trash is within reach of each.
         internal static void Diagnose()
         {
-            int cleaners = 0;
             try
             {
-                Il2CppArrayBase<Cleaner> arr = UnityEngine.Object.FindObjectsOfType<Cleaner>();
-                cleaners = arr != null ? arr.Length : 0;
+                Cleaner[] arr = FindCleaners();
                 InstancedTrash.BuildGrid();
                 int[] buf = new int[256];
-                Core.Log?.Msg($"[cleaner] DIAG: {cleaners} cleaner(s) found; field={InstancedTrash.Count}; range={Range}m, perCleaner={PerCleaner}; materialised={_real.Count}");
-                if (arr != null)
-                    for (int i = 0; i < arr.Length; i++)
-                    {
-                        Cleaner cl = arr[i]; if (cl == null) continue;
-                        Vector3 cp = cl.transform.position;
-                        int near = InstancedTrash.QueryGrid(cp.x, cp.z, Range, buf, buf.Length);
-                        int near50 = InstancedTrash.QueryGrid(cp.x, cp.z, 50f, buf, buf.Length);
-                        Core.Log?.Msg($"[cleaner]   #{i} at ({cp.x:F0},{cp.y:F0},{cp.z:F0}): data within {Range}m={near}, within 50m={near50}");
-                    }
+                Core.Log?.Msg($"[cleaner] DIAG: {arr.Length} cleaner(s) via EmployeeManager registry; field={InstancedTrash.Count}; range={Range}m, perCleaner={PerCleaner}; materialised={_real.Count}");
+                for (int i = 0; i < arr.Length; i++)
+                {
+                    Cleaner cl = arr[i]; if (cl == null) continue;
+                    Vector3 cp = cl.transform.position;
+                    int near = InstancedTrash.QueryGrid(cp.x, cp.z, Range, buf, buf.Length);
+                    int near50 = InstancedTrash.QueryGrid(cp.x, cp.z, 50f, buf, buf.Length);
+                    Core.Log?.Msg($"[cleaner]   #{i} at ({cp.x:F0},{cp.y:F0},{cp.z:F0}): data within {Range}m={near}, within 50m={near50}");
+                }
             }
             catch (Exception e) { Core.Log?.Warning("[cleaner] diag: " + e.Message); }
         }
