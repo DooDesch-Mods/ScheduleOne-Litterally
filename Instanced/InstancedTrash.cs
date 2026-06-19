@@ -684,6 +684,24 @@ namespace Trashville.Instanced
             return n;
         }
 
+        /// <summary>Count of live (non-dead) field instances whose XZ lies inside the given box, stopping once it
+        /// reaches `cap` (so an already-full region returns fast). The populator uses this to seed a region's
+        /// progress from the trash ALREADY present (restored from the save, or generated earlier) so it tops the
+        /// region up to its current target instead of double-filling. The field is the single source of truth.</summary>
+        internal static int CountInBox(float cx, float cz, float halfX, float halfZ, int cap)
+        {
+            if (_count <= 0 || _px == null || cap <= 0) return 0;
+            int n = 0;
+            for (int i = 0; i < _count; i++)
+            {
+                if (_dead[i]) continue;
+                float dx = _px[i] - cx; if (dx < 0f) dx = -dx; if (dx > halfX) continue;
+                float dz = _pz[i] - cz; if (dz < 0f) dz = -dz; if (dz > halfZ) continue;
+                if (++n >= cap) break;
+            }
+            return n;
+        }
+
         /// <summary>Pass 1 = anti-glitch ring around the PREDICTED player pos backCenter (front of the list, so the
         /// per-frame budget fills it first). Pass 2 = inside the current OR predicted frustum within viewDist.</summary>
         internal static int CollectVisible(float[] cur, float[] pred, Vector3 backCenter, Vector3 p,

@@ -48,37 +48,12 @@ namespace Trashville.Instanced
             try
             {
                 int n = InstancedTrash.WriteBlob(path);
-                WriteDoneKeys(path);
                 Core.Log?.Msg($"[blob] persisted {n} routed instanced items -> {path}");
+                // Clean up the obsolete done-key sidecar from older builds (the populator now reads region fill
+                // state from the field itself, so this file is no longer used and must not linger).
+                try { string gp = path + ".gen"; if (File.Exists(gp)) File.Delete(gp); } catch { }
             }
             catch (Exception e) { Core.Log?.Warning("[blob] save failed: " + e.Message); }
-        }
-
-        // Persist which generator regions we've already fully populated, so a reload skips them (no double-fill)
-        // while regions the player newly explores still fill. Stored next to the field blob.
-        private static void WriteDoneKeys(string blobPath)
-        {
-            try
-            {
-                System.Collections.Generic.List<string> keys = Spawning.TrashPopulator.SnapshotDone();
-                string gp = blobPath + ".gen";
-                if (keys == null || keys.Count == 0) { if (File.Exists(gp)) File.Delete(gp); return; }
-                File.WriteAllLines(gp, keys.ToArray());
-            }
-            catch (Exception e) { Core.Log?.Warning("[blob] region-marker save failed: " + e.Message); }
-        }
-
-        private static void ReadDoneKeys(string blobPath)
-        {
-            try
-            {
-                string gp = blobPath + ".gen";
-                if (!File.Exists(gp)) return;
-                string[] keys = File.ReadAllLines(gp);
-                Spawning.TrashPopulator.SeedDone(keys);
-                Core.Log?.Msg($"[blob] restored {keys.Length} populated-region markers");
-            }
-            catch (Exception e) { Core.Log?.Warning("[blob] region-marker load failed: " + e.Message); }
         }
 
         /// <summary>Called on OnLoadComplete. Rehydrates the routed field from the blob (if any).</summary>
@@ -92,7 +67,6 @@ namespace Trashville.Instanced
             try
             {
                 int n = InstancedTrash.ReadBlob(path);
-                ReadDoneKeys(path);
                 Core.Log?.Msg($"[blob] restored {n} routed instanced items from {path}");
                 // keep absorbing newly generated trash so behaviour stays "like base game" after a reload.
                 if (n > 0) Spawning.RouteHook.Active = true;
