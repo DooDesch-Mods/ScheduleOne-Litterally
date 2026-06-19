@@ -85,7 +85,6 @@ namespace Trashville.Instanced
         // True once AddOne has stored ROUTED game trash (vs the benchmark Setup field). Gates persistence: only
         // routed trash is saved to the blob; the benchmark `tv inst` field stays ephemeral.
         internal static bool RoutedDataPresent;
-        internal static bool RestoredFromBlob;   // true once the field was restored from the save blob this session (so TrashPopulator skips an already-populated world)
 
         // ----- struct-of-arrays instance state (pure managed) -----
         private static float[] _px, _pz, _py, _vy, _restY;
@@ -1017,7 +1016,6 @@ namespace Trashville.Instanced
             _capacity = 0;
             _pending = false;
             RoutedDataPresent = false;
-            RestoredFromBlob = false;
             Calibration.Reset();
             _px = _pz = _py = _vy = _restY = _qx = _qy = _qz = _qw = null;
             _type = null;
