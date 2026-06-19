@@ -233,8 +233,8 @@ Cleaner NPCs collect; persists across save/reload. Each stage has a failable che
 | A | Verify E6 (cleaner discovery) LIVE | a cleaner collects a real item spawned into `trashItems` | **blocked-UI / de-risked** |
 | B | Persistence blob (2c) | save->reload field byte-identical; 0 game trash files written | **DONE - LIVE-verified** |
 | C | Spatial grid (3) | grid neighbour query == brute-force scan (self-test) | **DONE - LIVE-verified** |
-| D | Cleaner actor (4) | cleaner walks to + collects a materialized item; data entry removed | todo (collection gated on A) |
-| E | Scale to 100k (5) | gradual generation reaches ~100k at playable FPS; save/load clean | in progress |
+| D | Cleaner actor (4) | cleaner walks to + collects a materialized item; data entry removed | in progress (collection gated on A) |
+| E | Scale to 100k (5) | gradual generation reaches ~100k at playable FPS; save/load clean | **DONE - LIVE-verified** |
 
 Log:
 - (A) **Result: blocked by a UI barrier; E6 de-risked by reasoning.** The game console *can* hire a cleaner
@@ -295,6 +295,12 @@ Log:
   a brute-force scan: LIVE result `16/16 PASS` (field=510, maxHits=228). Ready to drive the cleaner actor (D)
   and to cut per-actor query cost at scale (E). Integration into the player Virtualizer is deferred until E
   measures whether the linear `CollectVisible` is actually a bottleneck (don't pre-optimize).
+- (E) **DONE - 100k lag-free LIVE-verified.** `tv inst 100000` -> HUD `instanced 100000 drawn 33513 (culled)
+  real 0`, **49 FPS** (frame mean 20.8 ms), items grounded + varied (pose fixes hold at 100k). Routing
+  scales clean: 5310 routed @ 63 FPS, earlier 14,400 @ 66 FPS, manager always 0 (no real-object
+  accumulation/leak at any count). Persistence at scale: 5310-item blob round-trip (save 5310 -> restore
+  5310; 154 KB ~= 29 B/item; 100k would be ~3 MB). The linear `CollectVisible` was NOT a bottleneck at these
+  counts, so the grid is reserved for the cleaner actor (D), not retro-fitted into the player path.
 
 ## 8. Console surface (for reproduction)
 
