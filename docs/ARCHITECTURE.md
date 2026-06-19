@@ -233,7 +233,7 @@ Cleaner NPCs collect; persists across save/reload. Each stage has a failable che
 | A | Verify E6 (cleaner discovery) LIVE | a cleaner collects a real item spawned into `trashItems` | **blocked-UI / de-risked** |
 | B | Persistence blob (2c) | save->reload field byte-identical; 0 game trash files written | **DONE - LIVE-verified** |
 | C | Spatial grid (3) | grid neighbour query == brute-force scan (self-test) | **DONE - LIVE-verified** |
-| D | Cleaner actor (4) | cleaner walks to + collects a materialized item; data entry removed | in progress (collection gated on A) |
+| D | Cleaner actor (4) | cleaner walks to + collects a materialized item; data entry removed | **materialization LIVE-verified; collection de-risked** |
 | E | Scale to 100k (5) | gradual generation reaches ~100k at playable FPS; save/load clean | **DONE - LIVE-verified** |
 
 Log:
@@ -301,6 +301,29 @@ Log:
   accumulation/leak at any count). Persistence at scale: 5310-item blob round-trip (save 5310 -> restore
   5310; 154 KB ~= 29 B/item; 100k would be ~3 MB). The linear `CollectVisible` was NOT a bottleneck at these
   counts, so the grid is reserved for the cleaner actor (D), not retro-fitted into the player path.
+- (D) **Cleaner actor built (`Spawning/CleanerActor.cs`); materialization LIVE-verified.** Each frame it
+  refinds `Cleaner`s (FindObjectsOfType, every ~2 s), rebuilds the grid (every 30 frames), and for each
+  cleaner `QueryGrid`s the data items within `Range` (default 30 m) and materializes up to `PerCleaner` (6)
+  into real `TrashItem`s (same CreateTrashItem path, Suppress-wrapped so the route hook ignores them,
+  `SetRealized`+`Hide` so neither actor double-takes them). Items it collected (Item==null) -> `Kill` the
+  data; items that drift out of all cleaners' reach (and are not a cleaner's `TargetTrash`) -> demote back
+  to data. ClearAll wired into the save guard. LIVE-verified via `addemployee cleaner barn` + `tv cleaner
+  diag`: 1 cleaner found at (181,-5) with 157 data items within 50 m; with range 50 the actor materialized
+  exactly `PerCleaner`=6 real items near it (`manager`=6; data 157->151). So the actor correctly finds the
+  cleaner, grid-queries nearby data, and creates the real targets. **COLLECTION (cleaner walks to + picks
+  up) is NOT live-confirmed** - the throwaway save's cleaner is unassigned (needs the management-clipboard
+  UI, not automatable here) so it doesn't patrol/clean. But the materialized item is byte-identical to a
+  game-spawned `TrashItem` (E6), so a working cleaner treats it identically; the residual is pure base-game
+  behaviour. To finally confirm: assign the cleaner to a locker in a normal save and watch it collect.
+
+## 9. Status (performance mod)
+
+The headline goal is met and reproducible: **~100,000 trash instances on the map at ~49 FPS**, with the
+game spawning its own trash (routing), player pickup, persistence across save/reload, and cleaners getting
+real trash materialized near them - all on a ~4 MB data backing store instead of 100k GameObjects/save
+files. Stages B, C, E are fully LIVE-verified; D's materialization is verified and its collection is
+de-risked (base-game behaviour on a normal item, pending an assigned-cleaner confirmation). The one
+genuinely unverifiable-without-UI item is the final cleaner *pickup*, documented throughout.
 
 ## 8. Console surface (for reproduction)
 

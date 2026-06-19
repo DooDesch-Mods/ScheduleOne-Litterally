@@ -83,6 +83,12 @@ namespace Trashville
                     case "drift": { int dc = (p.Length > 2 && int.TryParse(p[2], out int dn)) ? dn : 20; Instanced.InstancedTrash.BeginDrift(dc); Log($"ground-drift self-test: activated up to {dc} dynamic probes; result in log after ~5s"); break; }
                     case "route": Spawning.RouteHook.Command(p); Log("route probe: see log ([route-probe])"); break;
                     case "gridtest": Instanced.InstancedTrash.GridSelfTest(); Log("spatial-grid self-test: see log ([grid])"); break;
+                    case "cleaner":
+                        if (p.Length > 2 && p[2] == "diag") { Spawning.CleanerActor.Diagnose(); Log("cleaner diag: see log ([cleaner])"); break; }
+                        if (p.Length > 3 && p[2] == "range" && float.TryParse(p[3], NumberStyles.Float, CultureInfo.InvariantCulture, out float crg)) { Spawning.CleanerActor.Range = Mathf.Clamp(crg, 2f, 120f); Log($"cleaner range = {Spawning.CleanerActor.Range}m"); break; }
+                        if (p.Length > 2) Spawning.CleanerActor.Enabled = Bool(p, 2, !Spawning.CleanerActor.Enabled);
+                        Log($"cleaner-actor enabled={Spawning.CleanerActor.Enabled}, materialized-near-cleaners={Spawning.CleanerActor.RealCount}");
+                        break;
                     case "onlytype": Instanced.InstancedTrash.OnlyType = (p.Length > 2 && p[2] != "off") ? p[2] : null; Instanced.Virtualizer.ClearAll(); Instanced.InstancedTrash.Clear(); Instanced.InstancedTrash.ResetPalette(); Log($"onlyType = {(Instanced.InstancedTrash.OnlyType ?? "off")} (respawn to apply)"); break;
                     case "maxtypes": if (p.Length > 2 && int.TryParse(p[2], out int mt)) { Instanced.InstancedTrash.MaxTypes = Mathf.Clamp(mt, 1, 8); Instanced.Virtualizer.ClearAll(); Instanced.InstancedTrash.Clear(); Instanced.InstancedTrash.ResetPalette(); } Log($"maxTypes = {Instanced.InstancedTrash.MaxTypes} (field cleared + palette reset - respawn to apply)"); break;
                     case "real": Instanced.Virtualizer.Enabled = Bool(p, 2, !Instanced.Virtualizer.Enabled); Log($"virtualizer (materialize near player) = {Instanced.Virtualizer.Enabled}"); break;

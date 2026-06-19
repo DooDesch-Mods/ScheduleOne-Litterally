@@ -122,6 +122,7 @@ namespace Trashville
             Instanced.InstancedTrash.Tick(Time.deltaTime);   // pure-array gravity sim (100k path)
             Instanced.InstancedTrash.DriftTick(Time.deltaTime); // ground-drift self-test timer (no-op unless armed)
             Instanced.Virtualizer.Tick();                    // materialize near-player instances -> real trash
+            Spawning.CleanerActor.Tick();                    // materialize near-cleaner instances -> real trash (NPCs collect them)
             Instanced.InstancedTrash.Render();               // GPU-instanced render; no-op until set up
 
             // Crash-resilient heartbeat: after a hard crash, Mods/Trashville/heartbeat.txt holds the

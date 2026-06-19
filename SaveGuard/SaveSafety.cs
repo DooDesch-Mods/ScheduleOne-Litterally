@@ -26,6 +26,7 @@ namespace Trashville.SaveGuard
             Trashville.Spawning.RouteHook.ResetState();
             Trashville.Spawning.GeneratorBoost.Restore();
             Trashville.Instanced.Virtualizer.ClearAll();          // destroy any materialized real items (don't persist)
+            Trashville.Spawning.CleanerActor.ClearAll();          // destroy any cleaner-materialized real items (don't persist)
             Trashville.Instanced.InstancedTrash.AbortCalibration(); // destroy any in-flight calibration probes (real Saveable items)
             Trashville.Instanced.InstancedTrash.AbortDrift();      // destroy any in-flight ground-drift probes (real Saveable items)
 
