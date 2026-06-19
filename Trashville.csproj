@@ -1,8 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    Trashville - MelonLoader IL2CPP mod for Schedule I.
-    Phase 1: a trash spawn + performance benchmark / ablation harness.
+    Trashville - MelonLoader IL2CPP trash performance mod for Schedule I.
+    Routes the game's own generated trash into a cheap instanced field so the world can hold far more
+    trash at high performance, materialising real pickup-able items near the player + cleaners.
+    DEBUG builds also include the benchmark / ablation harness; Release excludes the dev files (below).
     Cloned from the RVRepairVan template (net6.0 => Backend=il2cpp, refs from Workspace/lib/il2cpp).
   -->
 
@@ -16,9 +18,9 @@
     <RootNamespace>Trashville</RootNamespace>
     <AssemblyName>Trashville</AssemblyName>
     <NeutralLanguage>en-US</NeutralLanguage>
-    <Version>0.1.0</Version>
-    <AssemblyVersion>0.1.0.0</AssemblyVersion>
-    <FileVersion>0.1.0.0</FileVersion>
+    <Version>1.0.0</Version>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
     <!-- Suppress MSB3277/MSB3245 noise from il2cpp interop transitive refs -->
     <NoWarn>$(NoWarn);MSB3277;MSB3245</NoWarn>
 
@@ -46,6 +48,27 @@
   <ItemGroup>
     <Compile Remove="Compat/GlobalUsings.Il2Cpp.cs" Condition="'$(Backend)' != 'il2cpp'" />
     <Compile Remove="Compat/GlobalUsings.Mono.cs" Condition="'$(Backend)' != 'mono'" />
+  </ItemGroup>
+
+  <!--
+    Release: compile OUT the pure-dev / benchmark surface. The release-core (Core, Instanced/*, Spawning/
+    RouteHook+CleanerActor+GeneratorBoost+GameTrash, SaveGuard/SaveSafety, Config/Preferences) carries the
+    trash performance layer and references none of these files (the 3 game-trash helpers were extracted into
+    Spawning/GameTrash.cs). Debug keeps them all for the benchmark/ablation harness + dev console + HUD.
+  -->
+  <ItemGroup Condition="'$(Configuration)' == 'Release'">
+    <Compile Remove="Profiling/PerfSampler.cs" />
+    <Compile Remove="Profiling/AblationController.cs" />
+    <Compile Remove="Profiling/PhysicsProbe.cs" />
+    <Compile Remove="Profiling/PhysicsConfigDump.cs" />
+    <Compile Remove="UI/DebugHud.cs" />
+    <Compile Remove="TrashvilleConsole.cs" />
+    <Compile Remove="DiagLog.cs" />
+    <Compile Remove="Spawning/TrashSpawner.cs" />
+    <Compile Remove="Spawning/TrashRegistry.cs" />
+    <Compile Remove="Spawning/CloneSpawner.cs" />
+    <Compile Remove="Spawning/CloneRegistry.cs" />
+    <Compile Remove="Spawning/OptimizationLevers.cs" />
   </ItemGroup>
 
   <!-- Mod loader references (both backends) -->

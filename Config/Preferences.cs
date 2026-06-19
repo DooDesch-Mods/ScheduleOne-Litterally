@@ -6,7 +6,8 @@ namespace Trashville.Config
     /// <summary>
     /// MelonPreferences wrapper. The category id is prefixed with the mod name ("Trashville_...")
     /// so it is auto-detected by the "Mod Manager &amp; Phone App" settings UI (Prowiler).
-    /// The one-shot bool entries act as in-phone buttons - they fire once on save then reset.
+    /// Release entries (the performance layer) are always registered. The benchmark/dev entries -
+    /// including the one-shot "button" toggles - only register in DEBUG builds.
     /// </summary>
     internal static class Preferences
     {
@@ -14,6 +15,14 @@ namespace Trashville.Config
 
         private static MelonPreferences_Category _category;
 
+        // ----- release performance-layer entries (always compiled) -----
+        private static MelonPreferences_Entry<bool> _enablePerf;
+        private static MelonPreferences_Entry<bool> _enableInMp;
+        private static MelonPreferences_Entry<int> _maxRealItems;
+        private static MelonPreferences_Entry<float> _materializeDistance;
+        private static MelonPreferences_Entry<int> _trashMultiplier;
+
+#if DEBUG
         private static MelonPreferences_Entry<bool> _arm;
         private static MelonPreferences_Entry<bool> _showHud;
         private static MelonPreferences_Entry<int> _spawnPerFrame;
@@ -32,6 +41,7 @@ namespace Trashville.Config
         private static MelonPreferences_Entry<bool> _btnClear;
         private static MelonPreferences_Entry<bool> _btnPurgeAll;
         private static MelonPreferences_Entry<bool> _btnRunSweep;
+#endif
 
         internal static void Initialize()
         {
@@ -40,8 +50,32 @@ namespace Trashville.Config
                 return;
             }
 
-            _category = MelonPreferences.CreateCategory(CategoryId, "Trashville (Trash Benchmark)");
+#if DEBUG
+            _category = MelonPreferences.CreateCategory(CategoryId, "Trashville (Trash Performance + Benchmark)");
+#else
+            _category = MelonPreferences.CreateCategory(CategoryId, "Trashville (Trash Performance)");
+#endif
 
+            // ----- release performance-layer entries -----
+            _enablePerf = Create("EnablePerformanceLayer", true, "Enable performance layer",
+                "Master switch for the trash performance layer. When ON (default), the game's own generated trash is " +
+                "absorbed into a lightweight instanced field so the world can hold far more trash with little cost. " +
+                "Turn OFF to run fully vanilla (no routing, no instancing).");
+            _enableInMp = Create("EnableInMultiplayer", false, "Enable in multiplayer (experimental)",
+                "OFF (default): the performance layer auto-disables in a multiplayer session because the instanced " +
+                "field is local-only and would desync between players. ON: force-enable it in multiplayer for testing " +
+                "- expect visual desync between clients. Leave OFF unless you are testing.");
+            _maxRealItems = Create("MaxRealItems", 600, "Max real (interactable) items",
+                "How many trash items are materialised as real, pickup-able objects around you at once. Higher = more " +
+                "trash you can interact with at any moment, at a small per-item cost. Clamped 50-2000.");
+            _materializeDistance = Create("MaterializeDistance", 32f, "Materialize distance (m)",
+                "How far ahead of you trash becomes real/interactable (inside the view). Beyond this it is drawn cheaply " +
+                "as instanced data. Higher = interactable further out, at more cost. Clamped 8-80.");
+            _trashMultiplier = Create("TrashMultiplier", 1, "Trash amount multiplier",
+                "Multiplies how much trash the game's own generators produce. 1 = vanilla amount (default). Higher " +
+                "values fill the world with more trash, which the performance layer keeps cheap. Clamped 1-50.");
+
+#if DEBUG
             _arm = Create("ArmBenchmark", false, "ARM benchmark (spawns thousands of trash)",
                 "Master safety switch. While OFF, all spawning is a no-op. Spawned trash is auto-cleared on " +
                 "save / scene-change / quit and is NOT meant to persist. Only enable while benchmarking on a throwaway save.");
@@ -80,6 +114,7 @@ namespace Trashville.Config
             _btnClear = Create("ClearTrash", false, "> Clear MY benchmark trash (one-shot)", "Toggle ON to destroy only the trash this mod spawned. Auto-resets.");
             _btnPurgeAll = Create("PurgeAllTrash", false, "> PURGE ALL world trash (one-shot)", "Toggle ON to call DestroyAllTrash() - removes ALL trash in the world, including legitimate trash. Recovery for a bloated save. Auto-resets.");
             _btnRunSweep = Create("RunSweep", false, "> Run automated benchmark sweep (one-shot)", "Toggle ON to run the full spawn + ablation sweep and write a CSV under Mods/Trashville/runs/. Auto-resets.");
+#endif
         }
 
         private static MelonPreferences_Entry<T> Create<T>(string id, T def, string name, string desc = null)
@@ -87,7 +122,16 @@ namespace Trashville.Config
             return _category.CreateEntry(id, def, name, desc);
         }
 
-        // ----- typed accessors -----
+        // ----- release accessors (always compiled) -----
+
+        internal static bool EnablePerformanceLayer => _enablePerf?.Value ?? true;
+        internal static bool EnableInMultiplayer => _enableInMp?.Value ?? false;
+        internal static int MaxRealItems => Mathf.Clamp(_maxRealItems?.Value ?? 600, 50, 2000);
+        internal static float MaterializeDistance => Mathf.Clamp(_materializeDistance?.Value ?? 32f, 8f, 80f);
+        internal static int TrashMultiplier => Mathf.Clamp(_trashMultiplier?.Value ?? 1, 1, 50);
+
+#if DEBUG
+        // ----- benchmark accessors (DEBUG only) -----
 
         internal static bool ArmBenchmark => _arm?.Value ?? false;
         internal static bool ShowHud => _showHud?.Value ?? true;
@@ -148,7 +192,7 @@ namespace Trashville.Config
             }
         }
 
-        // ----- one-shot button consumers -----
+        // ----- one-shot button consumers (DEBUG only) -----
 
         internal static bool ConsumeSpawn100() => Consume(_btnSpawn100);
         internal static bool ConsumeSpawn1000() => Consume(_btnSpawn1000);
@@ -166,5 +210,6 @@ namespace Trashville.Config
             }
             return false;
         }
+#endif
     }
 }

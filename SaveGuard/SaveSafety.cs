@@ -4,31 +4,42 @@ using Trashville.Spawning;
 namespace Trashville.SaveGuard
 {
     /// <summary>
-    /// CRITICAL: benchmark trash must NEVER reach the player's save. Each TrashItem is individually
-    /// Saveable, so a 10k pile would write thousands of files and persist forever. We force-clear on
-    /// every save/teardown path. The save path uses the guaranteed DestroyAllTrash() sweep (loud),
-    /// because our in-memory registry can miss items; manual testing uses the scoped clear.
+    /// CRITICAL: nothing the performance layer materialises may reach the player's save. The routed instanced
+    /// field is pure DATA and is never a Saveable, so it can never bloat the save; it is persisted separately as a
+    /// compact blob (SaveBlob.Save runs BEFORE this). This guard only has to destroy the transient REAL items the
+    /// layer materialises (near the player / cleaners, plus any in-flight probes) so they are not serialized.
+    ///
+    /// The DEBUG benchmark additionally creates real game trash via the spawner/clones; those paths nuke ALL world
+    /// trash (loud) and are compiled out of Release.
     /// </summary>
     internal static class SaveSafety
     {
         /// <summary>
-        /// Guaranteed clear used on the save / teardown paths. If we ever spawned this session, nuke
-        /// ALL world trash so nothing benchmark-related can be serialized. Loud on purpose.
+        /// Clear used on the save / scene-change / teardown paths. Release: a TARGETED clear only - drain the route
+        /// destroy queue, un-boost generators, demote the materialised reals back to data, abort in-flight probes.
+        /// It deliberately does NOT call DestroyAllTrash (that would also delete the player's own dropped trash,
+        /// which with routing on is real + non-routed) and does NOT permanently stop routing (the perf layer must
+        /// keep running after the save). The routed data persists via the blob, so clearing the reals loses nothing.
         /// </summary>
         internal static void ForceClearForSave(string reason)
         {
-            TrashSpawner.CancelPending();
-            // Routing: stop absorbing, drain the transient destroy queue, and un-boost generators so a continued
-            // session isn't stuck with boosted generators. Routed trash is pure DATA (never Saveable) so it can
-            // never bloat the save; only the transient/near-materialized reals matter and are swept below.
-            Trashville.Spawning.RouteHook.Active = false;
+            // Routing: drain the transient destroy queue so no half-absorbed real item lingers, and un-boost the
+            // generators. Do NOT turn routing OFF in release - it must keep absorbing after the save completes.
             Trashville.Spawning.RouteHook.Tick();
-            Trashville.Spawning.RouteHook.ResetState();
             Trashville.Spawning.GeneratorBoost.Restore();
-            Trashville.Instanced.Virtualizer.ClearAll();          // destroy any materialized real items (don't persist)
+            Trashville.Instanced.Virtualizer.ClearAll();          // destroy any materialized (player) real items (don't persist)
             Trashville.Spawning.CleanerActor.ClearAll();          // destroy any cleaner-materialized real items (don't persist)
             Trashville.Instanced.InstancedTrash.AbortCalibration(); // destroy any in-flight calibration probes (real Saveable items)
             Trashville.Instanced.InstancedTrash.AbortDrift();      // destroy any in-flight ground-drift probes (real Saveable items)
+
+#if DEBUG
+            // Benchmark-only: stop absorbing, drop in-flight routing state, then nuke ALL world trash because the
+            // benchmark spawner + bypass clones create real game trash that DestroyAllTrash / the registries clean
+            // up. None of this exists in Release (no spawner, no clones), so it is gated out.
+            TrashSpawner.CancelPending();
+            Trashville.Spawning.RouteHook.Active = false;
+            Trashville.Spawning.RouteHook.Tick();
+            Trashville.Spawning.RouteHook.ResetState();
 
             // Bypass clones are GameObjects we own and are NOT in tm.trashItems, so DestroyAllTrash misses
             // them - destroy them ourselves on every save/teardown path or 10k objects leak into the session.
@@ -51,8 +62,8 @@ namespace Trashville.SaveGuard
                 return;   // we never created game trash via any path; leave the player's trash alone
             }
 
-            var tm = TrashSpawner.TrashManagerOrNull();
-            int before = tm != null ? TrashSpawner.TrashItemCount(tm) : 0;
+            var tm = GameTrash.TrashManagerOrNull();
+            int before = tm != null ? GameTrash.TrashItemCount(tm) : 0;
             try
             {
                 tm?.DestroyAllTrash();
@@ -63,8 +74,10 @@ namespace Trashville.SaveGuard
                 Core.Log?.Error("[SaveGuard] DestroyAllTrash failed: " + e.Message);
             }
             TrashRegistry.Clear();
+#endif
         }
 
+#if DEBUG
         /// <summary>Destroy ONLY the trash this mod spawned (for iterative testing). Best-effort.</summary>
         internal static void ScopedClear()
         {
@@ -104,8 +117,8 @@ namespace Trashville.SaveGuard
             {
                 CloneRegistry.DestroyAll();
             }
-            var tm = TrashSpawner.TrashManagerOrNull();
-            int before = tm != null ? TrashSpawner.TrashItemCount(tm) : 0;
+            var tm = GameTrash.TrashManagerOrNull();
+            int before = tm != null ? GameTrash.TrashItemCount(tm) : 0;
             try
             {
                 tm?.DestroyAllTrash();
@@ -117,5 +130,6 @@ namespace Trashville.SaveGuard
             }
             TrashRegistry.Clear();
         }
+#endif
     }
 }

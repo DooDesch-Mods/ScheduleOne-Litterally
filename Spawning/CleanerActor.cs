@@ -45,7 +45,7 @@ namespace Trashville.Spawning
         internal static void Tick()
         {
             if (!Enabled || InstancedTrash.Count <= 0) return;
-            TrashManager tm = TrashSpawner.TrashManagerOrNull();
+            TrashManager tm = GameTrash.TrashManagerOrNull();
             if (tm == null) return;
 
             // 1) refind cleaners + rebuild the spatial grid periodically.

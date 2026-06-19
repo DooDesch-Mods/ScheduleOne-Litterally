@@ -75,8 +75,8 @@ namespace Trashville.Instanced
             {
                 return;
             }
-            var tm = Spawning.TrashSpawner.TrashManagerOrNull();
-            if (tm == null || !Spawning.TrashSpawner.TryGetPlayerPosition(out Vector3 pp))
+            var tm = Spawning.GameTrash.TrashManagerOrNull();
+            if (tm == null || !Spawning.GameTrash.TryGetPlayerPosition(out Vector3 pp))
             {
                 return;
             }

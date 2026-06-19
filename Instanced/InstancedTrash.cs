@@ -443,7 +443,7 @@ namespace Trashville.Instanced
         private static int TypeIndexFor(string id)
         {
             if (_typeIndex.TryGetValue(id, out int idx)) return idx;
-            var tm = Spawning.TrashSpawner.TrashManagerOrNull();
+            var tm = Spawning.GameTrash.TrashManagerOrNull();
             if (tm == null) return -1;
             TType ty = BuildType(tm, id, 1f);
             if (ty == null) { _typeIndex[id] = -1; return -1; }   // cache the negative so we don't rebuild every spawn
@@ -784,7 +784,7 @@ namespace Trashville.Instanced
         // =========================================================================================
         private static bool EnsurePalette()
         {
-            var tm = Spawning.TrashSpawner.TrashManagerOrNull();
+            var tm = Spawning.GameTrash.TrashManagerOrNull();
             if (tm == null) return false;
 
             // debug: isolate a single type so we can see exactly how ONE type renders instanced.
@@ -949,7 +949,7 @@ namespace Trashville.Instanced
         /// <summary>Debug: dump every renderable mesh part of each palette prefab + which parts the instancer renders.</summary>
         internal static void DumpMeshParts()
         {
-            var tm = Spawning.TrashSpawner.TrashManagerOrNull();
+            var tm = Spawning.GameTrash.TrashManagerOrNull();
             if (tm == null) { Core.Log?.Warning("[meshdiag] no TrashManager"); return; }
             foreach (var pe in Palette)
             {
@@ -1088,9 +1088,9 @@ namespace Trashville.Instanced
                     if (!types[t].Calibrated) _pendingTypes.Add(types[t]);
                 if (_pendingTypes.Count == 0) return false;
 
-                var tm = Spawning.TrashSpawner.TrashManagerOrNull();
+                var tm = Spawning.GameTrash.TrashManagerOrNull();
                 if (tm == null) return false;
-                if (!Spawning.TrashSpawner.TryGetPlayerPosition(out Vector3 pp)) return false;
+                if (!Spawning.GameTrash.TryGetPlayerPosition(out Vector3 pp)) return false;
 
                 // log if the bake ground is sloped (would tilt poses) so it's visible rather than silent.
                 if (Physics.Raycast(pp + Vector3.up, Vector3.down, out RaycastHit rh, 5f, GroundRayMask, QueryTriggerInteraction.Ignore)
@@ -1109,9 +1109,9 @@ namespace Trashville.Instanced
                 DestroyProbes();
                 _caps.Clear();
                 _typeFrames = 0;
-                var tm = Spawning.TrashSpawner.TrashManagerOrNull();
+                var tm = Spawning.GameTrash.TrashManagerOrNull();
                 if (tm == null) return false;
-                if (!Spawning.TrashSpawner.TryGetPlayerPosition(out Vector3 pp)) return false;
+                if (!Spawning.GameTrash.TryGetPlayerPosition(out Vector3 pp)) return false;
 
                 for (int k = 0; k < PosesPerType; k++)
                 {
@@ -1278,9 +1278,9 @@ namespace Trashville.Instanced
             internal static void Begin(int count)
             {
                 if (Active) { Core.Log?.Msg("[drift] already running"); return; }
-                var tm = Spawning.TrashSpawner.TrashManagerOrNull();
+                var tm = Spawning.GameTrash.TrashManagerOrNull();
                 if (tm == null) { Core.Log?.Warning("[drift] no TrashManager"); return; }
-                if (!Spawning.TrashSpawner.TryGetPlayerPosition(out Vector3 pp)) { Core.Log?.Warning("[drift] no player"); return; }
+                if (!Spawning.GameTrash.TryGetPlayerPosition(out Vector3 pp)) { Core.Log?.Warning("[drift] no player"); return; }
                 if (!Ready || _count <= 0) { Core.Log?.Warning("[drift] no instanced field to sample"); return; }
 
                 _idx.Clear(); _items.Clear(); _start.Clear(); _startRot.Clear(); _elapsed = 0f;

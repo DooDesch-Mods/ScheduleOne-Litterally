@@ -441,48 +441,13 @@ namespace Trashville.Spawning
 
         // ----- helpers -----
 
-        internal static TrashManager TrashManagerOrNull()
-        {
-            try
-            {
-                return NetworkSingleton<TrashManager>.Instance;
-            }
-            catch
-            {
-                return null;
-            }
-        }
+        // These 3 lookups now live in GameTrash (always-compiled) so the release-core can use them without
+        // referencing this dev-only spawner. Kept here as thin delegations so TrashSpawner's own callers compile.
+        internal static TrashManager TrashManagerOrNull() => GameTrash.TrashManagerOrNull();
 
-        internal static int TrashItemCount(TrashManager tm)
-        {
-            try
-            {
-                return tm != null && tm.trashItems != null ? tm.trashItems.Count : 0;
-            }
-            catch
-            {
-                return 0;
-            }
-        }
+        internal static int TrashItemCount(TrashManager tm) => GameTrash.TrashItemCount(tm);
 
-        internal static bool TryGetPlayerPosition(out Vector3 pos)
-        {
-            pos = Vector3.zero;
-            try
-            {
-                Player p = Player.Local;
-                if (p == null)
-                {
-                    return false;
-                }
-                pos = p.transform.position;
-                return true;
-            }
-            catch
-            {
-                return false;
-            }
-        }
+        internal static bool TryGetPlayerPosition(out Vector3 pos) => GameTrash.TryGetPlayerPosition(out pos);
 
         /// <summary>The player's horizontal facing direction (for placing the rain in front of them).</summary>
         private static Vector3 PlayerForwardFlat()

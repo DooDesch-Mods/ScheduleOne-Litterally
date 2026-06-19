@@ -206,8 +206,8 @@ namespace Trashville.Spawning
                     break;
                 case "stat":
                     {
-                        var tm = TrashSpawner.TrashManagerOrNull();
-                        int mgr = -1; try { if (tm != null) mgr = TrashSpawner.TrashItemCount(tm); } catch { }
+                        var tm = GameTrash.TrashManagerOrNull();
+                        int mgr = -1; try { if (tm != null) mgr = GameTrash.TrashItemCount(tm); } catch { }
                         Core.Log?.Msg($"[route] STAT  active={Active}  absorbMode={(AbsorbAny ? "ANY (legacy)" : "generator-only (good-citizen)")}  instanced={InstancedTrash.Count}  realTrashItems(manager)={mgr}  settling={_settling.Count}  absorbed={Absorbed} skipped(echo+othermod)={Skipped} atCap={AtCap}");
                         if (Probe) Core.Log?.Msg($"[route-probe]  public calls={PubCalls} distinct={_distinctPub.Count}  private calls={PrivCalls} distinct={_distinctPriv.Count}");
                         break;
@@ -225,7 +225,7 @@ namespace Trashville.Spawning
                     catch (Exception e) { Core.Log?.Warning("[limit] read threw: " + e.Message); }
                     break;
                 case "clearreal":
-                    try { var tm = TrashSpawner.TrashManagerOrNull(); if (tm != null) tm.DestroyAllTrash(); Core.Log?.Msg("[route] DestroyAllTrash()"); } catch (Exception e) { Core.Log?.Warning("[route] clear failed: " + e.Message); }
+                    try { var tm = GameTrash.TrashManagerOrNull(); if (tm != null) tm.DestroyAllTrash(); Core.Log?.Msg("[route] DestroyAllTrash()"); } catch (Exception e) { Core.Log?.Warning("[route] clear failed: " + e.Message); }
                     break;
                 default:
                     Core.Log?.Msg("[route] usage: tv route on|off | boost [mult] | unboost | burst [n] | stat | probe on|off | absorbany on|off | clearreal");
@@ -235,7 +235,7 @@ namespace Trashville.Spawning
 
         private static void Burst(int perGenerator)
         {
-            if (!TrashSpawner.TryGetPlayerPosition(out Vector3 pp)) { Core.Log?.Warning("[route] no player"); return; }
+            if (!GameTrash.TryGetPlayerPosition(out Vector3 pp)) { Core.Log?.Warning("[route] no player"); return; }
             Il2CppSystem.Collections.Generic.List<TrashGenerator> all = null;
             try { all = TrashGenerator.AllGenerators; } catch (Exception e) { Core.Log?.Warning("[route] AllGenerators: " + e.Message); }
             if (all == null) { Core.Log?.Warning("[route] AllGenerators null"); return; }
