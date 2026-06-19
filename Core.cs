@@ -32,6 +32,7 @@ namespace Trashville
         private bool _inWorld;
         private bool _perfApplied;
         private int _perfLogState = -1;   // last logged perf-layer state (-1 unknown, 0 off-pref, 1 off-MP, 2 active) - dedups the re-arm logs
+        private float _teleElapsed; private int _teleFrames; private float _teleMaxDt;   // periodic-telemetry window accumulators
 #if DEBUG
         private int _frame;
 #endif
@@ -151,6 +152,28 @@ namespace Trashville
             Spawning.CleanerActor.Enabled = false;
         }
 
+        // Compact periodic status line (~every 15s). The Release build has no on-screen HUD or crash heartbeat, so
+        // this is the one window into the running performance layer - for support and for reviewing a play session.
+        private void TelemetryTick()
+        {
+            float dt = Time.unscaledDeltaTime;
+            _teleElapsed += dt;
+            _teleFrames++;
+            if (dt > _teleMaxDt) _teleMaxDt = dt;
+            if (_teleElapsed < 15f) return;
+
+            try
+            {
+                float meanFps = _teleFrames / _teleElapsed;
+                float minFps = _teleMaxDt > 0f ? 1f / _teleMaxDt : 0f;
+                var tm = GameTrash.TrashManagerOrNull();
+                int mgr = tm != null ? GameTrash.TrashItemCount(tm) : -1;
+                Log.Msg($"[telemetry] fps={meanFps:F0} (min {minFps:F0})  field-live={Instanced.InstancedTrash.LiveCount}  real-player={Instanced.Virtualizer.RealCount}  real-cleaner={Spawning.CleanerActor.RealCount}  mgr={mgr}  absorbed={RouteHook.Absorbed}");
+            }
+            catch { }
+            finally { _teleElapsed = 0f; _teleFrames = 0; _teleMaxDt = 0f; }
+        }
+
         private void HookModManager()
         {
             // Optional dependency - isolated + guarded so a missing ModManager never breaks load.
@@ -235,6 +258,8 @@ namespace Trashville
             Instanced.Virtualizer.Tick();                    // materialize near-player instances -> real trash
             Spawning.CleanerActor.Tick();                    // materialize near-cleaner instances -> real trash (NPCs collect them)
             Instanced.InstancedTrash.Render();               // GPU-instanced render; no-op until set up
+
+            TelemetryTick();                                 // compact periodic status line (release has no HUD)
 
 #if DEBUG
             // Crash-resilient heartbeat: after a hard crash, Mods/Trashville/heartbeat.txt holds the
