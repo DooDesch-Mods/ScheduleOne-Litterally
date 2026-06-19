@@ -231,7 +231,7 @@ Cleaner NPCs collect; persists across save/reload. Each stage has a failable che
 | Stage | Goal | Failable check | Status |
 |---|---|---|---|
 | A | Verify E6 (cleaner discovery) LIVE | a cleaner collects a real item spawned into `trashItems` | **blocked-UI / de-risked** |
-| B | Persistence blob (2c) | save->reload field byte-identical; 0 game trash files written | **code-done; write LIVE-verified; restore pending** |
+| B | Persistence blob (2c) | save->reload field byte-identical; 0 game trash files written | **DONE - LIVE-verified** |
 | C | Spatial grid (3) | grid neighbour query == brute-force scan (self-test) | in progress |
 | D | Cleaner actor (4) | cleaner walks to + collects a materialized item; data entry removed | todo (gated on A) |
 | E | Scale to 100k (5) | gradual generation reaches ~100k at playable FPS; save/load clean | todo |
@@ -273,14 +273,21 @@ Log:
   **Restore round-trip (reload -> 150 restored) is UNVERIFIED:** blocked by a game-relaunch infrastructure
   failure (Steam stopped relaunching the game after repeated reload/crash cycles). The code is sound; the
   restore path (`OnLoadComplete -> SaveBlob.Load -> Clear + ReadBlob`) needs a live reload to confirm.
-- **BLOCKER (game relaunch).** After the Stage-B reload/crash cycle, the game stopped relaunching via Steam
-  (Steam process is up; the game process never starts; no new MelonLoader log appears). This blocks the
-  LIVE verification of every remaining stage. Per fable-mode (verify each stage; do not accumulate
-  unverified work), construction is PAUSED here rather than building C/D/E blind. **To resume:** relaunch
-  Schedule I (or restart Steam) and load the Modding save; then verify in order: (B) reload restores the
-  blob field; (C) build + `gridtest` self-test; (D) cleaner actor; (E) scale to 100k.
-  Verified-and-committed so far: instanced render/pose fixes; game-trash routing; settle-then-virtualize
-  float fix; persistence blob (write LIVE-verified). All evidence in this file + commits up to `08a0a15`.
+- **BLOCKER (game relaunch) - RESOLVED.** The MCP launches via `steam run/<id>//<args>` with custom args
+  (`-screen-fullscreen 0`); Steam then shows a "allow custom launch arguments?" dialog that blocks the launch
+  when the user is away. **Solution (the project's launch method now): launch the exe DIRECTLY with NO args** -
+  `Start-Process "D:\...\Schedule I\Schedule I.exe"` (Steam must be running; Steamworks finds it). This bypasses
+  the dialog entirely. Windowed mode comes from the game's own registry key `DisplayMode_h1925482108 = 0`
+  (HKCU\Software\TVGS\Schedule I) - so NO `-screen-fullscreen` arg is needed. Verified: exe-direct launch
+  brings the game + MCP bridge up cleanly. For code changes: quit the game, `build_mod` (deploys the DLL while
+  unlocked - a build while the game is up/zombie does NOT overwrite the locked Mods/Trashville.dll), then
+  exe-direct relaunch. (Avoid `iterate_mod`: its hot-reload save-reload crashed the game.)
+- (B) **DONE - full round-trip LIVE-verified.** route on -> burst -> 150 absorbed -> `save` ->
+  `[blob] persisted 150` to `persistentDataPath/Trashville/saves/<steamid>_SaveGame_2.tvb` (the file EXISTS
+  after save - confirms the mod-folder location escapes DeleteUnapprovedFiles) -> return-to-menu + load ->
+  `[blob] restored 150` -> `tv route stat` shows instanced=150 (NOT doubled). Minor: `OnLoadComplete` fires
+  twice so Save/Load run twice; the clear-then-read Load and same-content Save make this idempotent (final
+  = 150). Could add a once-guard later; harmless.
 
 ## 8. Console surface (for reproduction)
 
