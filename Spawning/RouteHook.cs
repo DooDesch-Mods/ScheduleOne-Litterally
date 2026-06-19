@@ -41,7 +41,7 @@ namespace Trashville.Spawning
         // it floats, so we keep the real item alive a moment, let it settle, then virtualize at its SETTLED
         // transform (natural orientation, flush on the ground - like the rest of the field). _tracked dedups the
         // 4 echo-calls per item (persists until the item is virtualized, not just per-frame).
-        private sealed class SettleItem { public TrashItem Item; public Rigidbody Rb; public int Age; }
+        private sealed class SettleItem { public TrashItem Item; public Rigidbody Rb; public int Age; public int Rest; }
         private static readonly Dictionary<int, SettleItem> _settling = new Dictionary<int, SettleItem>();
         private static readonly HashSet<int> _tracked = new HashSet<int>();
         private static readonly List<int> _doneSettling = new List<int>();
@@ -50,6 +50,7 @@ namespace Trashville.Spawning
         private const int SettleMinFrames = 6;       // let it actually start falling before judging it settled
         private const int SettleMaxFrames = 150;     // ~2.5s cap: virtualize even if it never fully sleeps
         private const float SettleVel2 = 0.01f;
+        private const int SettleRestFrames = 8;      // require SUSTAINED rest (this many consecutive low-velocity frames) before capturing, so a tipping/wobbling item finishes settling instead of freezing mid-tip in an odd pose (e.g. a bottle balanced on its edge)
         private const int SettlingCap = 1200;        // burst overflow: above this, ground-snap immediately instead of tracking
 
         // ----- Phase 0 diagnostic counters -----
@@ -123,8 +124,11 @@ namespace Trashville.Spawning
                     SettleItem s = kv.Value;
                     if (s.Item == null) { _doneSettling.Add(kv.Key); _tracked.Remove(kv.Key); continue; }
                     s.Age++;
-                    bool settled = s.Age >= SettleMaxFrames ||
-                        (s.Age >= SettleMinFrames && (s.Rb == null || s.Rb.velocity.sqrMagnitude < SettleVel2));
+                    bool atRest = s.Rb == null || s.Rb.velocity.sqrMagnitude < SettleVel2;
+                    s.Rest = atRest ? s.Rest + 1 : 0;
+                    // Capture only after SUSTAINED rest, not a single low-velocity frame (which can be the apex of a
+                    // wobble/tip) - so items finish settling into a natural pose instead of freezing mid-tip.
+                    bool settled = s.Age >= SettleMaxFrames || (s.Age >= SettleMinFrames && s.Rest >= SettleRestFrames);
                     if (settled) { Record(kv.Key, s.Item, false); _doneSettling.Add(kv.Key); }
                 }
                 for (int k = 0; k < _doneSettling.Count; k++) _settling.Remove(_doneSettling[k]);
