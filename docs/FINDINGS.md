@@ -14,8 +14,11 @@ All numbers are measured in-game by the Trashville benchmark mod, not assumed.
    of up to ~2000 items add <= ~5 ms - below the engine's own frame-time drift. A sleeping rigidbody costs
    ~0 over a kinematic one.
 
-Structural fact: **the game hard-caps live trash at `TRASH_ITEM_LIMIT = 2000`** (a compile-time `const`),
-enforced by evicting the oldest trash whenever a new one is created.
+Structural fact: **the game hard-caps live trash at `TRASH_ITEM_LIMIT = 2000`**, enforced by evicting the
+oldest trash whenever a new one is created. (Correction, verified 2026-06-19: this is **not** a literal
+C# `const` - a real IL2CPP runtime field exists, `TrashManager.cs:864`/`:499-511`. But **writing it
+hard-crashes the game** - empirically confirmed by a live write test that killed the process mid-write. So
+treat it as read-only; never write it. See `docs/ARCHITECTURE.md` D1/E1.)
 
 ## How it was measured
 
@@ -54,8 +57,10 @@ noise floor* -> these subsystems are cheap for resting trash.
 
 ## Phase 2 (optimization) direction - now evidence-led, not assumed
 
-1. **Bypass the 2000 cap** - Harmony-patch the eviction / limit check in `TrashManager.CreateTrashItem`
-   (`TRASH_ITEM_LIMIT` is a const and cannot be written - writing it crashes; patch the *logic* instead).
+1. **Bypass the 2000 cap** - `TRASH_ITEM_LIMIT` cannot be written (the write hard-crashes - verified, see
+   `docs/ARCHITECTURE.md` D1). The shipped approach instead keeps `trashItems` near-empty by absorbing each
+   created item into the data field and destroying the real one, so the cap's eviction never triggers and
+   the limit never needs patching at all (see ARCHITECTURE.md D5/E9).
 2. **Force trash to sleep / go kinematic ASAP and stay asleep** - sleeping is free; the cost is motion.
 3. **Throttle or disable per-collision impact SFX at scale** - it is crash-level and gameplay-irrelevant at
    thousands of items.

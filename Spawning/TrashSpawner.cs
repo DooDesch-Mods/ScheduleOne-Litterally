@@ -422,12 +422,14 @@ namespace Trashville.Spawning
 
         // ----- limit handling -----
         //
-        // ROOT CAUSE of the crashes: TrashManager.TRASH_ITEM_LIMIT is a game `const` (= 2000), NOT a
-        // writable field. The IL2CPP interop exposes a setter, but writing a const via
-        // il2cpp_field_static_set_value writes to invalid memory => hard native crash. So we NEVER write
-        // it (nor TRASH_REPLICATIONS_PER_SECOND). We only read it, and detect if the game caps spawns.
+        // TrashManager.TRASH_ITEM_LIMIT (= 2000) is EFFECTIVELY READ-ONLY. Precise, verified 2026-06-19:
+        // it is NOT a literal C# const - a real IL2CPP runtime field exists (TrashManager.cs:864, get/set
+        // :499-511) - but WRITING it via the interop setter (il2cpp_field_static_set_value) HARD-CRASHES the
+        // game (live test: read=2000 ok, then write 100000 killed the process mid-write). So we NEVER write
+        // it (nor TRASH_REPLICATIONS_PER_SECOND); we only read it. The routing path doesn't need to: it keeps
+        // trashItems near-empty so the cap's eviction never fires. See docs/ARCHITECTURE.md D1/E1.
 
-        /// <summary>No-op: we never modify the game's (const) trash limit, so nothing to restore.</summary>
+        /// <summary>No-op: writing the game's trash limit hard-crashes (see above), so we never change it.</summary>
         internal static void RestoreLimit()
         {
         }

@@ -195,6 +195,14 @@ namespace Trashville.Spawning
                         if (Probe) Core.Log?.Msg($"[route-probe]  public calls={PubCalls} distinct={_distinctPub.Count}  private calls={PrivCalls} distinct={_distinctPriv.Count}");
                         break;
                     }
+                case "testlimit":
+                    // EMPIRICALLY RESOLVED 2026-06-19: reading TrashManager.TRASH_ITEM_LIMIT is fine (=2000), but
+                    // WRITING it hard-crashes the game (log stops mid-write, process dies). It is NOT a literal
+                    // C# const (a real IL2CPP field exists), yet the field is effectively read-only - never write
+                    // it. See docs/ARCHITECTURE.md. This command is now read-only.
+                    try { Core.Log?.Msg($"[limit] TRASH_ITEM_LIMIT = {TrashManager.TRASH_ITEM_LIMIT} (READ-ONLY; writing it hard-crashes the game - verified)."); }
+                    catch (Exception e) { Core.Log?.Warning("[limit] read threw: " + e.Message); }
+                    break;
                 case "clearreal":
                     try { var tm = TrashSpawner.TrashManagerOrNull(); if (tm != null) tm.DestroyAllTrash(); Core.Log?.Msg("[route] DestroyAllTrash()"); } catch (Exception e) { Core.Log?.Warning("[route] clear failed: " + e.Message); }
                     break;
