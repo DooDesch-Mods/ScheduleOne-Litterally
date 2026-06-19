@@ -71,9 +71,10 @@ namespace Trashville.Config
             _materializeDistance = Create("MaterializeDistance", 32f, "Materialize distance (m)",
                 "How far ahead of you trash becomes real/interactable (inside the view). Beyond this it is drawn cheaply " +
                 "as instanced data. Higher = interactable further out, at more cost. Clamped 8-80.");
-            _trashMultiplier = Create("TrashMultiplier", 1, "Trash amount multiplier",
-                "Multiplies how much trash the game's own generators produce. 1 = vanilla amount (default). Higher " +
-                "values fill the world with more trash, which the performance layer keeps cheap. Clamped 1-50.");
+            _trashMultiplier = Create("TrashMultiplier", 10, "Trash amount multiplier",
+                "Multiplies the game's OWN trash density (vanilla 0.015/m2 x this). 1 = vanilla; 10 = default (much " +
+                "more); 50 = the maximum (~100,000 total across the map). The performance layer absorbs it into a " +
+                "cheap instanced field and fills the world around you as you explore. Clamped 1-50.");
 
 #if DEBUG
             _arm = Create("ArmBenchmark", false, "ARM benchmark (spawns thousands of trash)",
@@ -128,7 +129,7 @@ namespace Trashville.Config
         internal static bool EnableInMultiplayer => _enableInMp?.Value ?? false;
         internal static int MaxRealItems => Mathf.Clamp(_maxRealItems?.Value ?? 600, 50, 2000);
         internal static float MaterializeDistance => Mathf.Clamp(_materializeDistance?.Value ?? 32f, 8f, 80f);
-        internal static int TrashMultiplier => Mathf.Clamp(_trashMultiplier?.Value ?? 1, 1, 50);
+        internal static int TrashMultiplier => Mathf.Clamp(_trashMultiplier?.Value ?? 10, 1, 50);
 
 #if DEBUG
         // ----- benchmark accessors (DEBUG only) -----

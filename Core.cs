@@ -123,12 +123,10 @@ namespace Trashville
                 Instanced.Virtualizer.Enabled = true;   // (re-)enable player + cleaner materialization in case a
                 Spawning.CleanerActor.Enabled = true;   // prior frame had the layer disabled
 
-                // Optional: multiply the game's own generator output. 1 = vanilla amount (no boost).
+                // Drive the game's OWN generators harder (vanilla TrashCountMultiplier, up to 50x) and let routing
+                // absorb the extra into the cheap field, around the player as they explore. 1 = vanilla amount.
                 int mult = Preferences.TrashMultiplier;
-                if (mult > 1)
-                {
-                    GeneratorBoost.Apply(mult);
-                }
+                Spawning.TrashPopulator.Multiplier = mult;
 
                 // Push the user's interactable budget + range into the Virtualizer.
                 Instanced.Virtualizer.MaxReal = Preferences.MaxRealItems;
@@ -150,6 +148,7 @@ namespace Trashville
             RouteHook.Active = false;
             Instanced.Virtualizer.Enabled = false;
             Spawning.CleanerActor.Enabled = false;
+            Spawning.TrashPopulator.Multiplier = 1;   // stop driving extra generation
         }
 
         // Compact periodic status line (~every 15s). The Release build has no on-screen HUD or crash heartbeat, so
@@ -214,6 +213,7 @@ namespace Trashville
 #endif
             SaveSafety.ForceClearForSave("scene unloaded");
             Instanced.InstancedTrash.Clear();
+            Spawning.TrashPopulator.Reset();
 #if DEBUG
             CloneSpawner.Reset();
             TrashSpawner.RestoreLimit();
@@ -257,6 +257,7 @@ namespace Trashville
 #endif
             Instanced.Virtualizer.Tick();                    // materialize near-player instances -> real trash
             Spawning.CleanerActor.Tick();                    // materialize near-cleaner instances -> real trash (NPCs collect them)
+            Spawning.TrashPopulator.Tick(Time.deltaTime);    // drive the game's generators harder near the player -> routed into the field
             Instanced.InstancedTrash.Render();               // GPU-instanced render; no-op until set up
 
             TelemetryTick();                                 // compact periodic status line (release has no HUD)

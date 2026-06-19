@@ -66,7 +66,7 @@ namespace Trashville.Instanced
                 int n = InstancedTrash.ReadBlob(path);
                 Core.Log?.Msg($"[blob] restored {n} routed instanced items from {path}");
                 // keep absorbing newly generated trash so behaviour stays "like base game" after a reload.
-                if (n > 0) Spawning.RouteHook.Active = true;
+                if (n > 0) { Spawning.RouteHook.Active = true; InstancedTrash.RestoredFromBlob = true; }
             }
             catch (Exception e) { Core.Log?.Warning("[blob] load failed: " + e.Message); }
         }
