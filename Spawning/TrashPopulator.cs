@@ -35,8 +35,10 @@ namespace Trashville.Spawning
         private const int BatchPerGen = 30;        // items generated per region per pass (bounded so routing drains them before 2000)
         private const int GensPerPass = 2;         // regions advanced per pass (stagger)
         private const float PassEvery = 0.3f;      // seconds between passes
+        private const float NoSpawnInView = 50f;   // never generate trash this close AND on-screen (it would visibly pop in) - fill it out of view / farther instead
 
         private static float _timer;
+        private static readonly float[] _planes = new float[24];   // camera frustum, recomputed each pass
         private static readonly HashSet<int> _done = new HashSet<int>();              // runtime ids at/over target (skip)
         private static readonly HashSet<int> _boosted = new HashSet<int>();           // runtime ids whose multiplier+max+seed we've set this session
         private static readonly Dictionary<int, int> _generated = new Dictionary<int, int>();   // our running fill count per runtime id (seeded from the field, then += each batch)
@@ -58,6 +60,10 @@ namespace Trashville.Spawning
             try { all = TrashGenerator.AllGenerators; } catch { return; }
             if (all == null) return;
 
+            // The player's current view - so we can avoid generating trash they're closely watching (it would pop in).
+            float[] planes = Instanced.Frustum.Compute(Instanced.Frustum.Cam(), _planes) ? _planes : null;
+            float noView2 = NoSpawnInView * NoSpawnInView;
+
             float r2 = Radius * Radius;
             int advanced = 0;
             for (int i = 0; i < all.Count && advanced < GensPerPass; i++)
@@ -71,7 +77,8 @@ namespace Trashville.Spawning
                 Vector3 gp;
                 try { gp = g.transform.position; } catch { continue; }
                 float dx = gp.x - pp.x, dz = gp.z - pp.z;
-                if (dx * dx + dz * dz > r2) continue;        // region not near the player yet
+                float d2 = dx * dx + dz * dz;
+                if (d2 > r2) continue;        // region not near the player yet
 
                 try
                 {
@@ -96,6 +103,12 @@ namespace Trashville.Spawning
                     int target = g.MaxTrashCount;
                     int have = _generated.TryGetValue(id, out int v) ? v : 0;
                     if (target <= 0 || have >= target) { _done.Add(id); continue; }
+
+                    // Don't let the player WATCH trash pop in: if this region is close AND on-screen, defer it (no
+                    // _done, so it fills later when it is behind/beside them or far ahead). The close view is then
+                    // already populated by the time they look / arrive.
+                    if (planes != null && d2 < noView2 && Instanced.Frustum.Contains(planes, gp.x, gp.y, gp.z, 3f))
+                        continue;
 
                     int batch = Math.Min(target - have, BatchPerGen);
                     g.GenerateTrash(batch);                  // vanilla generation -> opens the absorb window -> routed into the field
