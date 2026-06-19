@@ -20,7 +20,10 @@ namespace Trashville.Instanced
     /// </summary>
     internal static class Virtualizer
     {
-        internal static bool Enabled = false;
+        // ON by default: whenever an instanced field exists, materialize real (interactable) items near the player
+        // so trash can always be picked up/thrown out of the box. A no-op when there is no field. (`tv real off`
+        // disables it for a pure-render benchmark.)
+        internal static bool Enabled = true;
         internal static bool Predict = true;        // anticipate camera turn / player movement and pre-materialize
         // Research finding: Schedule I trash never blocks the player (player is a CharacterController; trash
         // colliders are non-blocking / walkable-through BY DESIGN), so DYNAMIC buys no collision - it only makes

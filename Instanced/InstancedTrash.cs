@@ -108,6 +108,9 @@ namespace Trashville.Instanced
         private static Vector3 _pendingCenter;
 
         internal static int Count => _count;
+        // Live = not yet collected/removed. _count keeps dead slots (Kill only flags _dead), so this is the real
+        // "trash still on the map" number - it drops as the player or a cleaner collects items.
+        internal static int LiveCount { get { if (_dead == null) return _count; int n = 0; for (int i = 0; i < _count; i++) if (!_dead[i]) n++; return n; } }
         internal static int Active => _active;
         internal static int Drawn => _lastDrawn;
         internal static int TypeCount => _types != null ? _types.Length : 0;

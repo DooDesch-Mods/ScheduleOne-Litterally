@@ -75,7 +75,7 @@ namespace Trashville.UI
             int inst = Trashville.Instanced.InstancedTrash.Count;
             if (inst > 0)
             {
-                sb.AppendLine($"instanced {inst}  drawn {Trashville.Instanced.InstancedTrash.Drawn} (culled)  real {Trashville.Instanced.Virtualizer.RealCount}");
+                sb.AppendLine($"instanced {inst} (live {Trashville.Instanced.InstancedTrash.LiveCount})  drawn {Trashville.Instanced.InstancedTrash.Drawn} (culled)  real {Trashville.Instanced.Virtualizer.RealCount}");
             }
 
             sb.Append("armed: ").Append(Config.Preferences.ArmBenchmark ? "YES" : "no");

@@ -176,7 +176,7 @@ namespace Trashville.Spawning
                 Cleaner[] arr = FindCleaners();
                 InstancedTrash.BuildGrid();
                 int[] buf = new int[256];
-                Core.Log?.Msg($"[cleaner] DIAG: {arr.Length} cleaner(s) via EmployeeManager registry; field={InstancedTrash.Count}; range={Range}m, perCleaner={PerCleaner}; materialised={_real.Count}");
+                Core.Log?.Msg($"[cleaner] DIAG: {arr.Length} cleaner(s) via EmployeeManager registry; field={InstancedTrash.Count} (live {InstancedTrash.LiveCount}); range={Range}m, perCleaner={PerCleaner}; materialised={_real.Count}");
                 for (int i = 0; i < arr.Length; i++)
                 {
                     Cleaner cl = arr[i]; if (cl == null) continue;
