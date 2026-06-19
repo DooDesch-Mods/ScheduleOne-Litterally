@@ -188,11 +188,17 @@ namespace Trashville.Instanced
                     if (item != null)
                     {
                         InstancedTrash.MarkRealCreated();   // a real Saveable TrashItem now exists -> save guard must sweep
-                        // Render-decouple: claim the index (so it is not re-materialized) but DO NOT hide the instance -
-                        // the real item exists purely for interaction (collider/pickup/throw) with its renderer OFF, so
-                        // the instanced copy keeps providing the visuals at the exact same pose (no shading swap on
-                        // look). The instance is only hidden once the item diverges (see the handoff above).
-                        InstancedTrash.SetRealized(idx, true);
+                        InstancedTrash.SetRealized(idx, true);   // claim the index so it is not re-materialized
+
+                        // Performance mode (KINEMATIC): render-decouple - keep the real renderer OFF and let the
+                        // instanced copy draw it at the exact pose (seamless, no shading swap on look). It is revealed
+                        // only once it diverges (grabbed/thrown).
+                        // ActivePhysics (DYNAMIC): the item settles/shifts a few cm under physics, so the fixed-pose
+                        // instance would drift away from the real collider and E would aim at empty space. So SHOW the
+                        // real renderer and hide the instance NOW - the visible item IS the collider, so pickup is
+                        // consistent (and you see it react/settle, which is the whole point of active physics).
+                        bool showReal = Collide;
+                        if (showReal) InstancedTrash.Hide(idx);
                         Il2CppArrayBase<Renderer> rends = null;
                         try
                         {
@@ -205,14 +211,14 @@ namespace Trashville.Instanced
                                     // Match the instanced field's shadow setting (no shadow-pop on the eventual reveal,
                                     // and no extra shadow pass while it is hidden).
                                     if (!InstancedTrash.Shadows) rends[r].shadowCastingMode = ShadowCastingMode.Off;
-                                    rends[r].enabled = false;   // invisible until the item diverges; the instance draws it
+                                    rends[r].enabled = showReal;   // kinematic: instance draws it; dynamic: the real item is shown
                                 }
                             }
                         }
                         catch { }
                         Rigidbody rb = null;
                         try { rb = item.GetComponentInChildren<Rigidbody>(); } catch { }
-                        _real[idx] = new Real { Item = item, Rb = rb, Rends = rends, Diverged = false, OutFrames = 0, Age = 0 };
+                        _real[idx] = new Real { Item = item, Rb = rb, Rends = rends, Diverged = showReal, OutFrames = 0, Age = 0 };
                         made++;
                     }
                 }

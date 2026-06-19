@@ -714,11 +714,12 @@ namespace Trashville.Instanced
             float r2 = radius * radius;
             for (int i = 0; i < _count; i++)
             {
-                if (_dead[i] || _hidden[i] || !_settled[i]) continue;
+                if (_dead[i] || !_settled[i]) continue;
                 float dx = _px[i] - p.x, dz = _pz[i] - p.z;
                 if (dx * dx + dz * dz > r2) continue;
-                totalInRadius++;
-                if (!_realized[i] && n < max) outIdx[n++] = i;
+                totalInRadius++;   // every settled instance in range, INCLUDING already-realized ones (they count toward
+                                   // the budget); else hiding the dynamic reals would inflate the radius to the cap.
+                if (!_realized[i] && !_hidden[i] && n < max) outIdx[n++] = i;
             }
             return n;
         }
