@@ -30,7 +30,7 @@ namespace Trashville.Instanced
         // no fall/jiggle, cheapest). 'tv collide on' = DYNAMIC physics (items react/can be shoved) if ever wanted.
         internal static bool Collide = false;
         internal static float ViewDist = 32f;       // MAX interactable radius (the adaptive _matRadius never grows past this)
-        internal static int MaxReal = 600;          // cap on simultaneous real items - THE perf/range dial (each real item costs ~0.004ms)
+        internal static int MaxReal = 200;          // cap on simultaneous real items - THE perf/range dial (each real item costs ~0.004ms); runtime value comes from Preferences.MaxRealItems
         internal static int NewPerFrame = 100;      // materializations/frame - cheap now spawns are kinematic; high so the real layer keeps up with movement (no trailing "loading" wave)
 
         // ----- nearest-first interactable set -----

@@ -67,16 +67,19 @@ namespace Trashville.Config
                 "OFF (default): the performance layer auto-disables in a multiplayer session because the instanced " +
                 "field is local-only and would desync between players. ON: force-enable it in multiplayer for testing " +
                 "- expect visual desync between clients. Leave OFF unless you are testing.");
-            _maxRealItems = Create("MaxRealItems", 600, "Max real (interactable) items",
-                "How many trash items are materialised as real, pickup-able objects around you at once. Higher = more " +
-                "trash you can interact with at any moment, at a small per-item cost. Clamped 50-2000.");
+            _maxRealItems = Create("MaxRealItems", 200, "Max real (interactable) items",
+                "How many trash items are materialised as real, pickup-able objects around you at once (default 200). " +
+                "Higher = a larger interactable radius around you, at a small per-item cost. Clamped 50-2000.",
+                new MelonLoader.Preferences.ValueRange<int>(50, 2000));
             _materializeDistance = Create("MaterializeDistance", 32f, "Materialize distance (m)",
                 "How far ahead of you trash becomes real/interactable (inside the view). Beyond this it is drawn cheaply " +
                 "as instanced data. Higher = interactable further out, at more cost. Clamped 8-80.");
             _trashMultiplier = Create("TrashMultiplier", 10, "Trash amount multiplier",
-                "Multiplies the game's OWN trash density (vanilla 0.015/m2 x this). 1 = vanilla; 10 = default (much " +
-                "more); 50 = the maximum (~100,000 total across the map). The performance layer absorbs it into a " +
-                "cheap instanced field and fills the world around you as you explore. Clamped 1-50.");
+                "Multiplies the game's OWN trash density (vanilla 0.015/m2 x this). 1 = vanilla; 10 = default; " +
+                "50 ~ 100,000; up to 1000 ~ 2,000,000 total across the map (extreme - very high values cost FPS " +
+                "as dense areas fill). The performance layer absorbs it into a cheap instanced field and fills " +
+                "the world around you as you explore. Clamped 1-1000.",
+                new MelonLoader.Preferences.ValueRange<int>(1, 1000));
             _activePhysics = Create("ActivePhysics", false, "Materialized trash has active physics",
                 "OFF (default) = trash near you is frozen at its resting pose (cheapest, seamless). ON = the real " +
                 "items materialized around you have live physics (they fall/settle and can be shoved). Applies live.");
@@ -125,18 +128,21 @@ namespace Trashville.Config
 #endif
         }
 
-        private static MelonPreferences_Entry<T> Create<T>(string id, T def, string name, string desc = null)
+        private static MelonPreferences_Entry<T> Create<T>(string id, T def, string name, string desc = null,
+            MelonLoader.Preferences.ValueValidator validator = null)
         {
-            return _category.CreateEntry(id, def, name, desc);
+            return validator == null
+                ? _category.CreateEntry(id, def, name, desc)
+                : _category.CreateEntry(id, def, name, desc, false, false, validator);
         }
 
         // ----- release accessors (always compiled) -----
 
         internal static bool EnablePerformanceLayer => _enablePerf?.Value ?? true;
         internal static bool EnableInMultiplayer => _enableInMp?.Value ?? false;
-        internal static int MaxRealItems => Mathf.Clamp(_maxRealItems?.Value ?? 600, 50, 2000);
+        internal static int MaxRealItems => Mathf.Clamp(_maxRealItems?.Value ?? 200, 50, 2000);
         internal static float MaterializeDistance => Mathf.Clamp(_materializeDistance?.Value ?? 32f, 8f, 80f);
-        internal static int TrashMultiplier => Mathf.Clamp(_trashMultiplier?.Value ?? 10, 1, 50);
+        internal static int TrashMultiplier => Mathf.Clamp(_trashMultiplier?.Value ?? 10, 1, 1000);
         internal static bool ActivePhysics => _activePhysics?.Value ?? false;
         internal static bool ShowFpsCounter => _showFps?.Value ?? false;
 
