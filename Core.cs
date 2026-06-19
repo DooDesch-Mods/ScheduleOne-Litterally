@@ -131,6 +131,7 @@ namespace Trashville
                 // Push the user's interactable budget + range into the Virtualizer.
                 Instanced.Virtualizer.MaxReal = Preferences.MaxRealItems;
                 Instanced.Virtualizer.ViewDist = Preferences.MaterializeDistance;
+                Instanced.Virtualizer.Collide = Preferences.ActivePhysics;   // materialized items: dynamic (on) vs frozen (off)
 
                 if (_perfLogState != 2) { Log.Msg($"[Core] Performance layer ACTIVE (maxReal={Preferences.MaxRealItems}, materializeDist={Preferences.MaterializeDistance}m, trashMult={mult})."); _perfLogState = 2; }
             }
@@ -149,6 +150,8 @@ namespace Trashville
             Instanced.Virtualizer.Enabled = false;
             Spawning.CleanerActor.Enabled = false;
             Spawning.TrashPopulator.Multiplier = 1;   // stop driving extra generation
+            Spawning.TrashPopulator.Reset();          // so a later re-enable re-populates from scratch
+            Instanced.InstancedTrash.Clear();         // drop the mod's field so the world is vanilla again
         }
 
         // Compact periodic status line (~every 15s). The Release build has no on-screen HUD or crash heartbeat, so
@@ -178,21 +181,37 @@ namespace Trashville
             // Optional dependency - isolated + guarded so a missing ModManager never breaks load.
             try
             {
-#if DEBUG
-                ModManagerPhoneApp.ModSettingsEvents.OnPhonePreferencesSaved += HandleCommands;
-                ModManagerPhoneApp.ModSettingsEvents.OnMenuPreferencesSaved += HandleCommands;
-                Log.Msg("[Core] Mod Manager & Phone App hooked (in-phone buttons available).");
-#else
-                // Release: no in-phone action buttons; settings are read live. Touch the type so the optional
-                // dependency stays referenced and the "not present" path is still exercised cleanly.
-                _ = typeof(ModManagerPhoneApp.ModSettingsEvents);
-                Log.Msg("[Core] Mod Manager & Phone App present - settings exposed in the phone app.");
-#endif
+                // Live settings: re-apply whenever the user saves settings in the phone app or the in-game menu.
+                ModManagerPhoneApp.ModSettingsEvents.OnPhonePreferencesSaved += OnSettingsSaved;
+                ModManagerPhoneApp.ModSettingsEvents.OnMenuPreferencesSaved += OnSettingsSaved;
+                Log.Msg("[Core] Mod Manager & Phone App hooked (settings apply live).");
             }
             catch (Exception)
             {
-                Log.Msg("[Core] Mod Manager & Phone App not present - using the MelonPreferences config file.");
+                Log.Msg("[Core] Mod Manager & Phone App not present - settings via the MelonPreferences config file (apply live on save).");
             }
+        }
+
+        /// <summary>
+        /// Re-apply the performance layer when settings change (MelonPreferences save or the phone app), so
+        /// changes - materialize distance, max real items, active physics, the FPS counter, the trash multiplier,
+        /// or enabling/disabling the layer - take effect LIVE without a restart.
+        /// </summary>
+        private void OnSettingsSaved()
+        {
+            try
+            {
+                if (_inWorld && GameTrash.TrashManagerOrNull() != null) ApplyPerformanceLayer();
+            }
+            catch (Exception e) { Log.Warning("[Core] live settings re-apply failed: " + e.Message); }
+#if DEBUG
+            HandleCommands();
+#endif
+        }
+
+        public override void OnPreferencesSaved()
+        {
+            OnSettingsSaved();
         }
 
         public override void OnSceneWasLoaded(int buildIndex, string sceneName)
@@ -277,12 +296,13 @@ namespace Trashville
 #endif
         }
 
-#if DEBUG
         public override void OnGUI()
         {
+#if DEBUG
             DebugHud.Draw();
-        }
 #endif
+            if (Preferences.ShowFpsCounter) UI.FpsCounter.Draw();
+        }
 
         public override void OnApplicationQuit()
         {
@@ -402,11 +422,6 @@ namespace Trashville
             {
                 Log.Warning("[Core] command dispatch failed: " + e.Message);
             }
-        }
-
-        public override void OnPreferencesSaved()
-        {
-            HandleCommands();
         }
 #endif
     }

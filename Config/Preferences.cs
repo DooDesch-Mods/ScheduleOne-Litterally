@@ -21,6 +21,8 @@ namespace Trashville.Config
         private static MelonPreferences_Entry<int> _maxRealItems;
         private static MelonPreferences_Entry<float> _materializeDistance;
         private static MelonPreferences_Entry<int> _trashMultiplier;
+        private static MelonPreferences_Entry<bool> _activePhysics;
+        private static MelonPreferences_Entry<bool> _showFps;
 
 #if DEBUG
         private static MelonPreferences_Entry<bool> _arm;
@@ -75,6 +77,11 @@ namespace Trashville.Config
                 "Multiplies the game's OWN trash density (vanilla 0.015/m2 x this). 1 = vanilla; 10 = default (much " +
                 "more); 50 = the maximum (~100,000 total across the map). The performance layer absorbs it into a " +
                 "cheap instanced field and fills the world around you as you explore. Clamped 1-50.");
+            _activePhysics = Create("ActivePhysics", false, "Materialized trash has active physics",
+                "OFF (default) = trash near you is frozen at its resting pose (cheapest, seamless). ON = the real " +
+                "items materialized around you have live physics (they fall/settle and can be shoved). Applies live.");
+            _showFps = Create("ShowFpsCounter", false, "Show FPS counter",
+                "Shows a small on-screen FPS readout (top-right). OFF by default. Applies live.");
 
 #if DEBUG
             _arm = Create("ArmBenchmark", false, "ARM benchmark (spawns thousands of trash)",
@@ -130,6 +137,8 @@ namespace Trashville.Config
         internal static int MaxRealItems => Mathf.Clamp(_maxRealItems?.Value ?? 600, 50, 2000);
         internal static float MaterializeDistance => Mathf.Clamp(_materializeDistance?.Value ?? 32f, 8f, 80f);
         internal static int TrashMultiplier => Mathf.Clamp(_trashMultiplier?.Value ?? 10, 1, 50);
+        internal static bool ActivePhysics => _activePhysics?.Value ?? false;
+        internal static bool ShowFpsCounter => _showFps?.Value ?? false;
 
 #if DEBUG
         // ----- benchmark accessors (DEBUG only) -----
