@@ -20,6 +20,7 @@ namespace Trashville.Config
         private static MelonPreferences_Entry<bool> _enableInMp;
         private static MelonPreferences_Entry<int> _maxRealItems;
         private static MelonPreferences_Entry<float> _materializeDistance;
+        private static MelonPreferences_Entry<float> _renderDistance;
         private static MelonPreferences_Entry<int> _trashMultiplier;
         private static MelonPreferences_Entry<bool> _activePhysics;
         private static MelonPreferences_Entry<bool> _showFps;
@@ -77,6 +78,11 @@ namespace Trashville.Config
             _materializeDistance = Create("MaterializeDistance", 32f, "Materialize distance (m)",
                 "How far ahead of you trash becomes real/interactable (inside the view). Beyond this it is drawn cheaply " +
                 "as instanced data. Higher = interactable further out, at more cost. Clamped 8-80.");
+            _renderDistance = Create("RenderDistance", 150f, "Render distance (m)",
+                "How far away trash is DRAWN. Beyond this distant (tiny on-screen) trash is skipped - the big render " +
+                "saving when looking across open ground. Does not affect interaction (see Materialize distance). " +
+                "Lower = more FPS / a nearer trash horizon; higher = trash visible further. Clamped 40-600.",
+                new MelonLoader.Preferences.ValueRange<float>(40f, 600f));
             _trashMultiplier = Create("TrashMultiplier", 10, "Trash amount multiplier",
                 "Multiplies the game's OWN trash density (vanilla 0.015/m2 x this). 1 = vanilla; 10 = default; " +
                 "50 ~ 100,000; up to 1000 ~ 2,000,000 total across the map (extreme - very high values cost FPS " +
@@ -154,6 +160,7 @@ namespace Trashville.Config
         internal static bool EnableInMultiplayer => _enableInMp?.Value ?? false;
         internal static int MaxRealItems => Mathf.Clamp(_maxRealItems?.Value ?? 200, 50, 2000);
         internal static float MaterializeDistance => Mathf.Clamp(_materializeDistance?.Value ?? 32f, 8f, 80f);
+        internal static float RenderDistance => Mathf.Clamp(_renderDistance?.Value ?? 150f, 40f, 600f);
         internal static int TrashMultiplier => Mathf.Clamp(_trashMultiplier?.Value ?? 10, 1, 1000);
         internal static bool ActivePhysics => _activePhysics?.Value ?? false;
         internal static bool ShowFpsCounter => _showFps?.Value ?? false;

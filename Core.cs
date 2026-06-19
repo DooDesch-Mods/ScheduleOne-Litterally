@@ -131,6 +131,7 @@ namespace Trashville
                 // Push the user's interactable budget + range into the Virtualizer.
                 Instanced.Virtualizer.MaxReal = Preferences.MaxRealItems;
                 Instanced.Virtualizer.ViewDist = Preferences.MaterializeDistance;
+                Instanced.InstancedTrash.RenderDist = Preferences.RenderDistance;   // distance cull for the instanced field
                 bool collideBefore = Instanced.Virtualizer.Collide;
                 Instanced.Virtualizer.Collide = Preferences.ActivePhysics;   // materialized items: dynamic (on) vs frozen (off)
                 // Live toggle: if active-physics changed, demote the currently-materialized items so they

@@ -72,6 +72,7 @@ namespace Trashville.Instanced
         private static Il2CppStructArray<Matrix4x4> _batch;
         private static readonly float[] _renderPlanes = new float[24];
         private const float RenderCullMargin = 6f;   // expand the cull frustum so big/edge items never pop at the screen edge
+        internal static float RenderDist = 150f;     // skip drawing instances beyond this XZ distance from the camera (0 = no cap); pushed from Preferences.RenderDistance. The interactable range is far smaller (Virtualizer.ViewDist)
         private static int _lastDrawn;               // visible instances drawn last frame (after culling)
 
         // ----- incremental-add model (routing the GAME's generated trash in one item at a time) -----
@@ -198,7 +199,10 @@ namespace Trashville.Instanced
                 ShadowCastingMode sc = Shadows ? ShadowCastingMode.On : ShadowCastingMode.Off;
                 // Unity does NOT frustum-cull DrawMeshInstanced instances - we do it ourselves. For each type we
                 // draw every distinct PART (root matrix * part-local) so the instanced model matches the full prefab.
-                float[] planes = Frustum.Compute(Frustum.Cam(), _renderPlanes) ? _renderPlanes : null;
+                Camera cam = Frustum.Cam();
+                float[] planes = (cam != null && Frustum.Compute(cam, _renderPlanes)) ? _renderPlanes : null;
+                float camX = 0f, camZ = 0f, rd2 = 0f;
+                if (cam != null && RenderDist > 0f) { Vector3 cp = cam.transform.position; camX = cp.x; camZ = cp.z; rd2 = RenderDist * RenderDist; }
                 int vis = 0;
                 for (int t = 0; t < _types.Length; t++)
                 {
@@ -216,6 +220,7 @@ namespace Trashville.Instanced
                         {
                             int i = bucket[bi];
                             if (_hidden[i] || _dead[i]) continue;
+                            if (rd2 > 0f) { float ddx = _px[i] - camX, ddz = _pz[i] - camZ; if (ddx * ddx + ddz * ddz > rd2) continue; }   // distance cap: don't draw tiny far instances
                             if (planes != null && !Frustum.Contains(planes, _px[i], _py[i], _pz[i], RenderCullMargin)) continue;
                             if (pi == 0) vis++;   // count each visible instance once (NOT per submesh)
                             _batch[count++] = Mul(_matrices[i], part.Local);
