@@ -409,3 +409,35 @@ API today; the generator-only gate already makes other mods' explicitly-created 
 (implicit exclusion at zero API cost). If a future cooperating mod genuinely needs it, the one-line upgrade is
 to expose a `public static bool RouteHook.Active` probe (and optionally a `Materialize(TrashItem)` that just
 sets `Suppress` around a re-create) - add it when there is a caller, not before.
+
+## 11. Release build (v1.0.0)
+
+**Two products from one source, split by `#if DEBUG`.** The mod began as a benchmark/ablation harness; the
+shipping build is the performance layer only.
+
+- **Release** = the performance layer, auto-on. On the first in-world frame `Core.ApplyPerformanceLayer()`
+  enables routing + materialization (honouring `Preferences`), so an end user just installs the DLL and the
+  game's trash gets cheaper with no setup. NO on-screen HUD, NO dev hotkeys, NO `tv` console, NO benchmark
+  spawner/clones/profiling - all of it is `#if DEBUG` or excluded from the Release compile in the csproj.
+  Metadata-verified: the Release DLL contains only the release-core types.
+- **Debug** = Release + the full dev surface (HUD, F-keys, `tv` console, spawn pump, ablation/physics probes,
+  crash heartbeat). Used for measurement/iteration.
+- **Helper extraction.** Release-core code only needed 3 game-trash accessors from the dev-only `TrashSpawner`
+  (`TrashManagerOrNull`/`TrashItemCount`/`TryGetPlayerPosition`); these moved to the always-compiled
+  `Spawning/GameTrash.cs` so every dev file can be excluded from Release cleanly.
+- **Save-safety differs by build.** The benchmark path nukes ALL world trash on save (it creates many untracked
+  real items). RELEASE does a TARGETED clear only (demote the materialized reals back to data, abort probes,
+  un-boost generators) and deliberately does NOT `DestroyAllTrash` - with routing on, a player's own dropped
+  trash is real + non-routed, so a blanket nuke would delete legit trash. The routed field persists via the blob.
+- **Config (`Config/Preferences.cs`).** Release entries (always): `EnablePerformanceLayer` (true),
+  `EnableInMultiplayer` (false), `MaxRealItems` (600), `MaterializeDistance` (32), `TrashMultiplier` (1).
+  Benchmark entries are `#if DEBUG`. When `EnablePerformanceLayer` is off, `SaveBlob.Load` is skipped and the
+  Virtualizer/CleanerActor are disabled, so the game stays fully vanilla.
+- **Multiplayer.** `Compat/Net.cs` `IsMultiplayer()` reads the game `Lobby` singleton (`IsInLobby && PlayerCount
+  > 1`); the layer auto-disables in MP unless `EnableInMultiplayer`. The instanced field is local-only, so real
+  host-authoritative MP sync is a documented TODO (the 2-player Lobby threshold still wants a live check).
+
+**LIVE-verified (2026-06-19)** after a clean save+restart on each config: Release loads with a clean init log
+(`Trashville v1.0.0 - trash performance layer active`), perf layer auto-ACTIVE, blob restored, NO on-screen
+HUD, SP correctly detected (not MP-disabled), 0 errors; Debug shows the HUD + `tv` console + F-key hints. Both
+configs build with 0 errors.

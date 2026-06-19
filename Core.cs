@@ -56,7 +56,9 @@ namespace Trashville
             GameLifecycle.OnSaveStart += () => { Instanced.SaveBlob.Save(); SaveSafety.ForceClearForSave("save starting"); _perfApplied = false; };
             GameLifecycle.OnPreSceneChange += () => SaveSafety.ForceClearForSave("scene changing");
             GameLifecycle.OnLoadComplete += OnGameLoaded;
-            GameLifecycle.OnLoadComplete += () => Instanced.SaveBlob.Load();
+            // Only restore the routed field when the performance layer is enabled - otherwise stay fully vanilla
+            // (an empty field renders nothing; the blob is left untouched on disk for when it's re-enabled).
+            GameLifecycle.OnLoadComplete += () => { if (Preferences.EnablePerformanceLayer) Instanced.SaveBlob.Load(); };
 
             HookModManager();
 
@@ -100,7 +102,7 @@ namespace Trashville
             {
                 if (!Preferences.EnablePerformanceLayer)
                 {
-                    RouteHook.Active = false;
+                    DisableLayer();
                     Log.Msg("[Core] Performance layer DISABLED via preferences - running vanilla trash.");
                     return;
                 }
@@ -110,12 +112,14 @@ namespace Trashville
                 // host-authoritative sync exists, auto-disable in MP unless a tester force-enables it.
                 if (Net.IsMultiplayer() && !Preferences.EnableInMultiplayer)
                 {
-                    RouteHook.Active = false;
+                    DisableLayer();
                     Log.Msg("[Core] Multiplayer session detected - performance layer auto-DISABLED (set EnableInMultiplayer to force it on for testing).");
                     return;
                 }
 
                 RouteHook.Active = true;   // absorb the game's own generated trash into the instanced field
+                Instanced.Virtualizer.Enabled = true;   // (re-)enable player + cleaner materialization in case a
+                Spawning.CleanerActor.Enabled = true;   // prior frame had the layer disabled
 
                 // Optional: multiply the game's own generator output. 1 = vanilla amount (no boost).
                 int mult = Preferences.TrashMultiplier;
@@ -134,6 +138,16 @@ namespace Trashville
             {
                 Log.Warning("[Core] ApplyPerformanceLayer failed: " + e.Message);
             }
+        }
+
+        /// <summary>Fully stand down the performance layer: stop absorbing, stop materializing real items near the
+        /// player + cleaners. The instanced field (if any was loaded) then renders nothing new and creates no real
+        /// trash, so the game behaves vanilla.</summary>
+        private static void DisableLayer()
+        {
+            RouteHook.Active = false;
+            Instanced.Virtualizer.Enabled = false;
+            Spawning.CleanerActor.Enabled = false;
         }
 
         private void HookModManager()
