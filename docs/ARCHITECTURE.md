@@ -187,7 +187,7 @@ TrashGenerator (boosted)                                    InstancedTrash (SoA 
 | E3 | Generated trash is a falling rigidbody that settles (capture-on-create floats) | **INFERENCE + LIVE** | `startKinematic=false` `TrashManager.cs:1026`; `initialVelocity`; `Rigidbody`/drag/`MIN_Y` `TrashItem.cs:153-222`; `GroundCheckMask` `TrashGenerator.cs:269`. LIVE: settled items ~0.2 m above ground after the fix |
 | E4 | Best settle signal is the Unity `Rigidbody` (velocity/sleep), not the game's internal fields | **SOURCE-FACT + INFERENCE** | `Rigidbody` public `TrashItem.cs:209`; game's `POSITION_CHANGE_THRESHOLD` value not in source `:139`; tick is native `MinPass`, no managed `Update` |
 | E5 | Keeping 100k real = ~100k serializes + ~100k load-instantiates (infeasible). NOTE: it is ONE `Trash.json` with an `Items[]` array, NOT 100k files (LIVE-corrected) | **SOURCE-FACT + LIVE** | `GetData`/`GetSaveString` `TrashItem.cs:830-848`; LIVE: `SaveGame_2/Trash.json` is a single file `{...,"Items":[]}` with our absorb -> 0 bloat. (The earlier "100k FILES" claim from `writtenItemFiles`/`DeleteUnapprovedFiles` was an over-claim.) |
-| E6 | Cleaners read only `trashItems` + a Transform; re-adding a real item near a cleaner makes it collectable | **UNVERIFIED (native)** | No managed spatial query exists; `SetTargetTrash` has no visible caller; `trashItems` is the only global list `TrashManager.cs:572`. **Needs a live cleaner test** |
+| E6 | A cleaner collects a materialized item near it - but ONLY if the item is REGISTERED as property litter (not merely real) | **LIVE-VERIFIED (2026-06-19)** | A raw `CreateTrashItem` kinematic item is real but ignored; a player-thrown item (Draggable->settle->`RecheckProperty`) IS collected. Fix: materialize `startKinematic:false` + `SetPhysicsActive(true)` + `RecheckProperty()` (`TrashItem.cs:866`). Also needs the cleaner in its ACTIVE SHIFT (a `settime` jump alone won't start it). User-confirmed: cleaner collects bags then all small litter, empties the bin, disposes the bag |
 | E7 | `Cleaner.UpdateBehaviour` (virtual) is the per-tick hook; `TrashItem.onDestroyed` fires on collect | **SOURCE-FACT** | `Cleaner.cs:1148`; `TrashItem.onDestroyed:Action<TrashItem>` `TrashItem.cs:348` |
 | E8 | `MaxTrashCount` raises generator output; generation is burst (no Update) | **LIVE + SOURCE-FACT** | LIVE: boost->14,400 spawned. No `Update` in `TrashGenerator` method list `:543-572`; `MaxTrashCount` instance int `:228` |
 | E9 | Absorb keeps `trashItems` near-empty so the cap never accumulates / no save bloat | **LIVE-VERIFIED** | manager count flat at 327+600 while 14,400 absorbed; 0 errors |
@@ -233,7 +233,7 @@ Cleaner NPCs collect; persists across save/reload. Each stage has a failable che
 | A | Verify E6 (cleaner discovery) LIVE | a cleaner collects a real item spawned into `trashItems` | **blocked-UI / de-risked** |
 | B | Persistence blob (2c) | save->reload field byte-identical; 0 game trash files written | **DONE - LIVE-verified** |
 | C | Spatial grid (3) | grid neighbour query == brute-force scan (self-test) | **DONE - LIVE-verified** |
-| D | Cleaner actor (4) | cleaner walks to + collects a materialized item; data entry removed | **materialization LIVE-verified; collection de-risked** |
+| D | Cleaner actor (4) | cleaner walks to + collects a materialized item; data entry removed | **DONE - LIVE-verified** (needs the registration fix: materialize dynamic + `RecheckProperty`; cleaner collects bags + all small litter, full bin/dispose loop) |
 | E | Scale to 100k (5) | gradual generation reaches ~100k at playable FPS; save/load clean | **DONE - LIVE-verified** |
 
 Log:
@@ -347,9 +347,12 @@ S1API + the actual game decompile confirmed the cleaner approach:
 The headline goal is met and reproducible: **~100,000 trash instances on the map at ~49 FPS**, with the
 game spawning its own trash (routing), player pickup, persistence across save/reload, and cleaners getting
 real trash materialized near them - all on a ~4 MB data backing store instead of 100k GameObjects/save
-files. Stages B, C, E are fully LIVE-verified; D's materialization is verified and its collection is
-de-risked (base-game behaviour on a normal item, pending an assigned-cleaner confirmation). The one
-genuinely unverifiable-without-UI item is the final cleaner *pickup*, documented throughout.
+files. Stages B, C, E are fully LIVE-verified. **Stage D (cleaner) is now also LIVE-verified (2026-06-19):**
+with an assigned + on-shift cleaner, it collects our materialized litter - bags first, then all small litter -
+brings it to the bin, empties the bin and disposes the bag, exactly like vanilla. The fix that unlocked it:
+materialize the working-set items as registered property litter (`startKinematic:false` + `SetPhysicsActive(true)`
++ `RecheckProperty()`), since the cleaner ignores real-but-unregistered items. Remaining polish (not blockers):
+a live (non-dead) count in the diag, and defaulting the player Virtualizer (`tv real`) ON (it resets OFF on reload).
 
 ## 8. Console surface (for reproduction)
 
