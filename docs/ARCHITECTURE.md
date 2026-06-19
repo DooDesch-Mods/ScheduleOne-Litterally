@@ -186,7 +186,7 @@ TrashGenerator (boosted)                                    InstancedTrash (SoA 
 | E2 | Public `CreateTrashItem` wraps private `CreateAndReturnTrashItem`; FishNet echoes both (4 calls/item, same instance) | **LIVE-VERIFIED** | Phase-0 probe: 30 logical = 60 public/30 distinct + 60 private/30 distinct |
 | E3 | Generated trash is a falling rigidbody that settles (capture-on-create floats) | **INFERENCE + LIVE** | `startKinematic=false` `TrashManager.cs:1026`; `initialVelocity`; `Rigidbody`/drag/`MIN_Y` `TrashItem.cs:153-222`; `GroundCheckMask` `TrashGenerator.cs:269`. LIVE: settled items ~0.2 m above ground after the fix |
 | E4 | Best settle signal is the Unity `Rigidbody` (velocity/sleep), not the game's internal fields | **SOURCE-FACT + INFERENCE** | `Rigidbody` public `TrashItem.cs:209`; game's `POSITION_CHANGE_THRESHOLD` value not in source `:139`; tick is native `MinPass`, no managed `Update` |
-| E5 | Each `TrashItem` is its own ISaveable -> 100k real = ~100k files + ~100k serializes + ~100k load-instantiates | **SOURCE-FACT (architecture)** | `GUID`/`SaveFolderName`/`GetData`/`GetSaveString` `TrashItem.cs:432-848`; `writtenItemFiles:List<string>` `TrashManager.cs:671`; `DeleteUnapprovedFiles` `ISaveable.cs:304`; `TrashLoader.Load`->`CreateTrashItem` |
+| E5 | Keeping 100k real = ~100k serializes + ~100k load-instantiates (infeasible). NOTE: it is ONE `Trash.json` with an `Items[]` array, NOT 100k files (LIVE-corrected) | **SOURCE-FACT + LIVE** | `GetData`/`GetSaveString` `TrashItem.cs:830-848`; LIVE: `SaveGame_2/Trash.json` is a single file `{...,"Items":[]}` with our absorb -> 0 bloat. (The earlier "100k FILES" claim from `writtenItemFiles`/`DeleteUnapprovedFiles` was an over-claim.) |
 | E6 | Cleaners read only `trashItems` + a Transform; re-adding a real item near a cleaner makes it collectable | **UNVERIFIED (native)** | No managed spatial query exists; `SetTargetTrash` has no visible caller; `trashItems` is the only global list `TrashManager.cs:572`. **Needs a live cleaner test** |
 | E7 | `Cleaner.UpdateBehaviour` (virtual) is the per-tick hook; `TrashItem.onDestroyed` fires on collect | **SOURCE-FACT** | `Cleaner.cs:1148`; `TrashItem.onDestroyed:Action<TrashItem>` `TrashItem.cs:348` |
 | E8 | `MaxTrashCount` raises generator output; generation is burst (no Update) | **LIVE + SOURCE-FACT** | LIVE: boost->14,400 spawned. No `Update` in `TrashGenerator` method list `:543-572`; `MaxTrashCount` instance int `:228` |
@@ -223,7 +223,58 @@ TrashGenerator (boosted)                                    InstancedTrash (SoA 
 | 4 | Cleaner actor (gated on E6) | planned | - |
 | 5 | Scale to 100k + budget | planned | - |
 
-## 7. Console surface (for reproduction)
+## 7. Work log (autonomous phase build, fable-mode)
+
+Done criteria: game spawns its own trash normally; ~100k instances at playable FPS; player pickup works;
+Cleaner NPCs collect; persists across save/reload. Each stage has a failable check.
+
+| Stage | Goal | Failable check | Status |
+|---|---|---|---|
+| A | Verify E6 (cleaner discovery) LIVE | a cleaner collects a real item spawned into `trashItems` | **blocked-UI / de-risked** |
+| B | Persistence blob (2c) | save->reload field byte-identical; 0 game trash files written | **code-done; write LIVE-verified; restore pending** |
+| C | Spatial grid (3) | grid neighbour query == brute-force scan (self-test) | in progress |
+| D | Cleaner actor (4) | cleaner walks to + collects a materialized item; data entry removed | todo (gated on A) |
+| E | Scale to 100k (5) | gradual generation reaches ~100k at playable FPS; save/load clean | todo |
+
+Log:
+- (A) **Result: blocked by a UI barrier; E6 de-risked by reasoning.** The game console *can* hire a cleaner
+  (`setowned barn` + `addemployee cleaner barn` + `teleport barn` - LIVE: a Cleaner NPC spawned at the barn).
+  But the cleaner does **not** clean until it is **assigned to a locker via the management-clipboard UI**
+  (in-game quest: "Use the management clipboard to assign the cleaner to a locker") - which cannot be driven
+  through the MCP (no aim/click). LIVE confirmation: 47 real trash spawned on the barn property stayed at 47
+  for >2 min (`tv route stat` manager=47, unchanged) - the unassigned cleaner ignored them.
+  **De-risking argument (why E6 is near-certain anyway):** a cleaner-actor item is materialized via the exact
+  same `TrashManager.CreateTrashItem` path as a game-spawned item -> identical `trashItems` membership,
+  collider, type, GUID. Whatever discovery+collection a base-game cleaner performs on normal trash, it
+  performs identically on ours (it is the *same kind of object*). Cleaners collecting trash is a shipped
+  base-game feature; our mod does not change the item, only that it *exists* near the cleaner. So E6 holds
+  given cleaners work at all. **Residual to confirm with a fully-assigned cleaner (user save):** that the
+  cleaner's native discovery actually reaches an item placed near it (vs only items it spawned itself).
+  Decision: Stage D uses the least-invasive "materialize + let native discovery work" design; if a future
+  live test shows native discovery does NOT pick up materialized items, the fallback is to actively feed the
+  cleaner a target via `PickUpTrashBehaviour.SetTargetTrash` (E7, `PickUpTrashBehaviour.cs:424`).
+- (B) **Persistence blob implemented (`Instanced/SaveBlob.cs`).** Write on `OnSaveStart` BEFORE the
+  working-set is cleared; read+rehydrate on `OnLoadComplete` (clear-then-read, so an in-session reload does
+  not double the field). Gated on `InstancedTrash.RoutedDataPresent` so the benchmark `tv inst` field stays
+  ephemeral. Format: magic + version + type-id table + per item {byte typeIndex; float pos[3]; float rot[4]}
+  (~30 B/item). Save path = `PersistentSingleton<LoadManager>.Instance.LoadedGameFolderPath` (the per-save
+  folder, LoadManager.cs:2852) - NOT `SaveManager.PlayersSavePath` which is only the Saves ROOT.
+  **Two empirical findings (LIVE):**
+  (1) Blob write succeeded - `[blob] persisted 150` to the per-save path. **BUT writing INSIDE the save
+  folder does not survive:** the game's save process runs `DeleteUnapprovedFiles(saveFolder)` and pruned our
+  `.tvb` right after we wrote it (verified: the file vanished from `SaveGame_2/`). **Fix:** write to a
+  MOD-OWNED folder OUTSIDE the save dir - `Application.persistentDataPath/Trashville/saves/<steamid>_SaveGame_N.tvb`
+  (a sibling of `Saves`, never pruned), keyed by the save folder identity.
+  (2) **Correction to E5:** the game does NOT write one file per trash item - it writes ONE `Trash.json` with
+  an `Items[]` array (verified: `SaveGame_2/Trash.json` = `{"DataType":"TrashData",...,"Items":[],"Generators":[]}`).
+  With our absorb keeping `trashItems` empty, `Items` is `[]` -> **0 game trash bloat confirmed.** (The
+  per-item GetData/serialize cost at 100k still stands as the reason to avoid keeping items real; the
+  "100k FILES" figure was an over-claim - it is 100k entries in one file.)
+  **Restore round-trip (reload -> 150 restored) is UNVERIFIED:** blocked by a game-relaunch infrastructure
+  failure (Steam stopped relaunching the game after repeated reload/crash cycles). The code is sound; the
+  restore path (`OnLoadComplete -> SaveBlob.Load -> Clear + ReadBlob`) needs a live reload to confirm.
+
+## 8. Console surface (for reproduction)
 
 `tv route on|off` - routing; `tv route boost [mult]` / `unboost` - generator output;
 `tv route burst [n]` - force a generator burst near the player (test tool); `tv route stat` - counters;

@@ -82,6 +82,9 @@ namespace Trashville.Instanced
         private static List<int>[] _typeBuckets;               // _typeBuckets[t] = instance indices of type t (for contiguous-ish render)
         private static readonly Dictionary<string, int> _typeIndex = new Dictionary<string, int>();   // trash id -> index into _types
         internal const int CapacityCeiling = 2_000_000;        // hard managed cap so the router can never grow arrays unbounded
+        // True once AddOne has stored ROUTED game trash (vs the benchmark Setup field). Gates persistence: only
+        // routed trash is saved to the blob; the benchmark `tv inst` field stays ephemeral.
+        internal static bool RoutedDataPresent;
 
         // ----- struct-of-arrays instance state (pure managed) -----
         private static float[] _px, _pz, _py, _vy, _restY;
@@ -372,9 +375,64 @@ namespace Trashville.Instanced
 
             _count++;
             _active = _count;
+            RoutedDataPresent = true;
             (_typeBuckets[t] ?? (_typeBuckets[t] = new List<int>(1024))).Add(i);
             if (_batch == null) _batch = new Il2CppStructArray<Matrix4x4>(BatchSize);
             return t;
+        }
+
+        // ----- compact persistence blob (routed game trash survives save/reload; never touches the game's
+        // per-item Saveable path). Format: magic, version, typeCount, [type id strings], itemCount,
+        // per item { byte typeIndex; float px,py,pz; float qx,qy,qz,qw } (~30 B/item). -----
+        private const int BlobMagic = 0x54565631; // "TVB1"
+
+        internal static int WriteBlob(string path)
+        {
+            using (var fs = new System.IO.FileStream(path, System.IO.FileMode.Create, System.IO.FileAccess.Write))
+            using (var bw = new System.IO.BinaryWriter(fs))
+            {
+                bw.Write(BlobMagic);
+                bw.Write(1);
+                int tc = _types != null ? _types.Length : 0;
+                bw.Write(tc);
+                for (int t = 0; t < tc; t++) bw.Write(_types[t].Id ?? "");
+                int live = 0;
+                for (int i = 0; i < _count; i++) if (!_dead[i]) live++;
+                bw.Write(live);
+                for (int i = 0; i < _count; i++)
+                {
+                    if (_dead[i]) continue;
+                    bw.Write(_type[i]);
+                    bw.Write(_px[i]); bw.Write(_py[i]); bw.Write(_pz[i]);
+                    bw.Write(_qx[i]); bw.Write(_qy[i]); bw.Write(_qz[i]); bw.Write(_qw[i]);
+                }
+                return live;
+            }
+        }
+
+        internal static int ReadBlob(string path)
+        {
+            using (var fs = new System.IO.FileStream(path, System.IO.FileMode.Open, System.IO.FileAccess.Read))
+            using (var br = new System.IO.BinaryReader(fs))
+            {
+                if (br.ReadInt32() != BlobMagic) return 0;
+                br.ReadInt32(); // version
+                int tc = br.ReadInt32();
+                var ids = new string[tc];
+                for (int t = 0; t < tc; t++) ids[t] = br.ReadString();
+                int n = br.ReadInt32();
+                int added = 0;
+                for (int i = 0; i < n; i++)
+                {
+                    byte ti = br.ReadByte();
+                    float px = br.ReadSingle(), py = br.ReadSingle(), pz = br.ReadSingle();
+                    float qx = br.ReadSingle(), qy = br.ReadSingle(), qz = br.ReadSingle(), qw = br.ReadSingle();
+                    string id = (ti < ids.Length) ? ids[ti] : null;
+                    if (string.IsNullOrEmpty(id)) continue;
+                    if (AddOne(id, new Vector3(px, py, pz), new Quaternion(qx, qy, qz, qw)) >= 0) added++;
+                }
+                return added;
+            }
         }
 
         // Resolve a trash id to a type index, lazily building (and appending) a new type for ids the game spawns
@@ -859,6 +917,7 @@ namespace Trashville.Instanced
             _active = 0;
             _capacity = 0;
             _pending = false;
+            RoutedDataPresent = false;
             Calibration.Reset();
             _px = _pz = _py = _vy = _restY = _qx = _qy = _qz = _qw = null;
             _type = null;

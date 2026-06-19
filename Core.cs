@@ -39,9 +39,12 @@ namespace Trashville
             try { HarmonyInstance.PatchAll(); } catch (Exception e) { Log.Warning("[Core] Harmony patch failed: " + e.Message); }
 
             // Save-safety: benchmark trash must never be serialized. Clear before any save / scene change.
-            GameLifecycle.OnSaveStart += () => SaveSafety.ForceClearForSave("save starting");
+            // Routed game-trash persists as a compact mod blob: write it BEFORE the working-set is cleared
+            // (the blob sees the SoA data; ForceClearForSave only destroys the real items), restore on load.
+            GameLifecycle.OnSaveStart += () => { Instanced.SaveBlob.Save(); SaveSafety.ForceClearForSave("save starting"); };
             GameLifecycle.OnPreSceneChange += () => SaveSafety.ForceClearForSave("scene changing");
             GameLifecycle.OnLoadComplete += OnGameLoaded;
+            GameLifecycle.OnLoadComplete += () => Instanced.SaveBlob.Load();
 
             HookModManager();
 
