@@ -492,6 +492,101 @@ namespace Trashville.Instanced
             }
         }
 
+        // =========================================================================================
+        //  Uniform spatial-hash grid (x,z) over the field, so an ACTOR (player, cleaner) can find the items
+        //  near it in O(neighbours) instead of scanning all _count every frame. Cells are keyed by integer
+        //  cell coords packed into a long. Rebuilt periodically (the routed field is mostly static); the query
+        //  applies the same dynamic filter as CollectNear, so a slightly stale grid is still correct for the
+        //  flag part (it only misses items added since the last rebuild, which appear at the next rebuild).
+        // =========================================================================================
+        private const float GridCell = 8f;
+        private static readonly Dictionary<long, List<int>> _grid = new Dictionary<long, List<int>>(4096);
+
+        private static int CellOf(float v) => Mathf.FloorToInt(v / GridCell);
+        private static long CellKey(int cx, int cz) => ((long)(uint)cx << 32) | (uint)cz;
+        // An item is an actor candidate iff it is live, not hidden, not already materialized, and settled
+        // (identical predicate to CollectNear / CollectVisible).
+        private static bool ActorCandidate(int i) => !_dead[i] && !_hidden[i] && !_realized[i] && _settled[i];
+
+        internal static void BuildGrid()
+        {
+            foreach (var kv in _grid) kv.Value.Clear();   // reuse the per-cell lists
+            for (int i = 0; i < _count; i++)
+            {
+                if (_dead[i]) continue;                    // dead = permanently gone; everything else is placed by position
+                long key = CellKey(CellOf(_px[i]), CellOf(_pz[i]));
+                if (!_grid.TryGetValue(key, out List<int> list)) { list = new List<int>(8); _grid[key] = list; }
+                list.Add(i);
+            }
+        }
+
+        /// <summary>Actor candidates within `radius` (2D) of (x,z), via the grid. Same result as a brute-force
+        /// scan but only touches the ~(2*ceil(r/cell)+1)^2 cells around the point.</summary>
+        internal static int QueryGrid(float x, float z, float radius, int[] outIdx, int max)
+        {
+            if (_px == null) return 0;
+            float r2 = radius * radius;
+            int cR = Mathf.CeilToInt(radius / GridCell);
+            int qcx = CellOf(x), qcz = CellOf(z);
+            int n = 0;
+            for (int cx = qcx - cR; cx <= qcx + cR && n < max; cx++)
+                for (int cz = qcz - cR; cz <= qcz + cR && n < max; cz++)
+                {
+                    if (!_grid.TryGetValue(CellKey(cx, cz), out List<int> list)) continue;
+                    for (int li = 0; li < list.Count && n < max; li++)
+                    {
+                        int i = list[li];
+                        if (!ActorCandidate(i)) continue;
+                        float dx = _px[i] - x, dz = _pz[i] - z;
+                        if (dx * dx + dz * dz <= r2) outIdx[n++] = i;
+                    }
+                }
+            return n;
+        }
+
+        private static int BruteNear(float x, float z, float radius, int[] outIdx, int max)
+        {
+            float r2 = radius * radius; int n = 0;
+            for (int i = 0; i < _count && n < max; i++)
+            {
+                if (!ActorCandidate(i)) continue;
+                float dx = _px[i] - x, dz = _pz[i] - z;
+                if (dx * dx + dz * dz <= r2) outIdx[n++] = i;
+            }
+            return n;
+        }
+
+        /// <summary>FAILABLE self-test (tv gridtest): the grid query must return EXACTLY the same index set as a
+        /// brute-force scan for many random query points/radii. Logs PASS/FAIL.</summary>
+        internal static void GridSelfTest()
+        {
+            if (_count <= 0) { Core.Log?.Warning("[grid] no field; spawn (tv inst) or route first"); return; }
+            BuildGrid();
+            var rng = new System.Random(777);
+            int[] g = new int[16384], b = new int[16384];
+            int tests = 16, pass = 0, maxN = 0;
+            for (int t = 0; t < tests; t++)
+            {
+                int pick = rng.Next(_count);
+                float x = _px[pick] + (float)(rng.NextDouble() * 30.0 - 15.0);
+                float z = _pz[pick] + (float)(rng.NextDouble() * 30.0 - 15.0);
+                float r = 6f + (float)(rng.NextDouble() * 26.0);   // mix of radii 6..32m
+                int gn = QueryGrid(x, z, r, g, g.Length);
+                int bn = BruteNear(x, z, r, b, b.Length);
+                if (gn > maxN) maxN = gn;
+                bool ok = gn == bn;
+                if (ok)
+                {
+                    Array.Sort(g, 0, gn); Array.Sort(b, 0, bn);
+                    for (int k = 0; k < gn; k++) if (g[k] != b[k]) { ok = false; break; }
+                }
+                if (ok) pass++;
+                else Core.Log?.Warning($"[grid] MISMATCH at ({x:F0},{z:F0}) r={r:F0}: grid={gn} brute={bn}");
+            }
+            Core.Log?.Msg($"[grid] SELF-TEST {(pass == tests ? "PASS" : "FAIL")}: {pass}/{tests} query points match brute-force " +
+                          $"(cell={GridCell}m, field={_count}, maxHits={maxN}).");
+        }
+
         // ----- navmesh ground (cached by cell; tree/roof-safe), refined to the exact surface -----
         private static Ground SampleGround(float x, float z, float fallbackY)
         {

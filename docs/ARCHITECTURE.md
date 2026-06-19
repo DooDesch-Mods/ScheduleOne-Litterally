@@ -232,9 +232,9 @@ Cleaner NPCs collect; persists across save/reload. Each stage has a failable che
 |---|---|---|---|
 | A | Verify E6 (cleaner discovery) LIVE | a cleaner collects a real item spawned into `trashItems` | **blocked-UI / de-risked** |
 | B | Persistence blob (2c) | save->reload field byte-identical; 0 game trash files written | **DONE - LIVE-verified** |
-| C | Spatial grid (3) | grid neighbour query == brute-force scan (self-test) | in progress |
-| D | Cleaner actor (4) | cleaner walks to + collects a materialized item; data entry removed | todo (gated on A) |
-| E | Scale to 100k (5) | gradual generation reaches ~100k at playable FPS; save/load clean | todo |
+| C | Spatial grid (3) | grid neighbour query == brute-force scan (self-test) | **DONE - LIVE-verified** |
+| D | Cleaner actor (4) | cleaner walks to + collects a materialized item; data entry removed | todo (collection gated on A) |
+| E | Scale to 100k (5) | gradual generation reaches ~100k at playable FPS; save/load clean | in progress |
 
 Log:
 - (A) **Result: blocked by a UI barrier; E6 de-risked by reasoning.** The game console *can* hire a cleaner
@@ -288,6 +288,13 @@ Log:
   `[blob] restored 150` -> `tv route stat` shows instanced=150 (NOT doubled). Minor: `OnLoadComplete` fires
   twice so Save/Load run twice; the clear-then-read Load and same-content Save make this idempotent (final
   = 150). Could add a once-guard later; harmless.
+- (C) **DONE - grid self-test LIVE-verified.** Uniform spatial-hash grid (`InstancedTrash` `_grid`, 8 m cells,
+  cell key = packed int coords). `QueryGrid(x,z,r)` scans only the ~(2*ceil(r/cell)+1)^2 cells around the
+  point and applies the same `ActorCandidate` filter as `CollectNear`. `tv gridtest` (`GridSelfTest`) builds
+  the grid then, for 16 random points x radii 6-32 m, asserts `QueryGrid` returns the EXACT same index set as
+  a brute-force scan: LIVE result `16/16 PASS` (field=510, maxHits=228). Ready to drive the cleaner actor (D)
+  and to cut per-actor query cost at scale (E). Integration into the player Virtualizer is deferred until E
+  measures whether the linear `CollectVisible` is actually a bottleneck (don't pre-optimize).
 
 ## 8. Console surface (for reproduction)
 
