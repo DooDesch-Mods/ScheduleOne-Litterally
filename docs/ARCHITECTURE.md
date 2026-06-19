@@ -356,4 +356,53 @@ genuinely unverifiable-without-UI item is the final cleaner *pickup*, documented
 `tv route on|off` - routing; `tv route boost [mult]` / `unboost` - generator output;
 `tv route burst [n]` - force a generator burst near the player (test tool); `tv route stat` - counters;
 `tv route probe on` - Phase-0 create-method logging; `tv route testlimit` - read-only (writing crashes);
-`tv real on` - materialize near the player. Plus the Phase-1 keys in FINDINGS.md.
+`tv route absorbany on|off` - good-citizen toggle (default off = absorb only the game generator's trash, never
+other mods'); `tv real on` - materialize near the player. Plus the Phase-1 keys in FINDINGS.md.
+
+## 10. Mod compatibility / good citizen
+
+**Goal:** other installed trash mods (UpgradedTrashCans, EmployeeTweaks, anything using S1API's `Trash`
+passthrough, etc.) must keep working with Trashville installed.
+
+**Default is already a perfect citizen.** Routing is OPT-IN and OFF by default (`RouteHook.Active=false`):
+the absorb postfix early-returns, no generator boost, nothing destroyed. With default settings the game's
+`TrashManager` is 100% vanilla to every other mod. Nothing needed there.
+
+**The only residual risk is when a user turns routing ON** (`tv route on`). The Harmony postfix on
+`TrashManager.CreateAndReturnTrashItem` then fires for EVERY trash creation. The breaking case: another mod
+calls `TrashManager.CreateTrashItem` to place a specific item and keep using it - Trashville would settle it,
+copy it into pure data, and `DestroyTrash` the real object, so the other mod's item vanishes from under it.
+(A mod merely *reading* `trashItems` seeing it near-empty is inherent to routing-ON, which the game's own
+trash also obeys; a mod *Harmony-patching* the trash classes is unaffected - we don't block its patches.)
+
+**Fix (minimal): absorb ONLY the game generator's trash, never another mod's explicit trash.** [SOURCE-FACT]
+The generator's only create path is `TrashGenerator.GenerateMaxTrash()` (natural cadence: Awake/Start/
+SleepStart) and `GenerateTrash(int)` (burst). We Harmony-patch those two to set a thread-local
+`RouteHook.GeneratorActive` window (nesting-safe shared depth counter; closed by a **Finalizer** so a
+generator exception can never leave it stuck open; also force-reset on `route off`). `OnCreate` now absorbs
+only while that window is open. So trash created OUTSIDE a generator pass - every other mod's
+`CreateTrashItem` call, and any vanilla pickup/drop create - is left REAL.
+
+This converts the absorb rule from a **denylist** (the old `Suppress` flag: "steal everything except creates
+WE wrap" - fails OPEN, stealing any unknown caller's item) into an **allowlist** ("steal only the generator's
+output" - fails CLOSED, never touching an unknown caller). `Suppress` is retained for our own
+materialize/probe creates that legitimately happen inside no generator pass.
+
+- Escape hatch: `tv route absorbany on` restores the legacy absorb-everything behaviour for a user who wants it.
+- `tv route stat` now reports the absorb mode and counts other-mod/echo skips together.
+- **LIVE check (failable):** `tv route on` then `tv route burst` calls `TrashGenerator.GenerateTrash`, so the
+  generator window must open and `tv route stat` `absorbed` must climb. If it stays 0 while `burst` reports
+  generators fired, the window does not wrap the create (assumption broken) - flip `absorbany on` and re-open
+  the gate question. The old absorb-everything routing was verified through this same `burst`/`GenerateTrash`
+  path, so the window covers it.
+
+**S1API:** nothing to register or announce. Verified (section 8b): S1API has no trash/cleaner behaviour
+interface - only a thin `CreateTrashItem`/`DestroyAllTrash` passthrough. Being non-invasive (default-off; and
+when on, generator-only) is sufficient. Established trash mods patch the raw game assembly directly, exactly
+as we do, so there is no shared registry to join.
+
+**Detection / materialize-or-exclude API: intentionally NOT built (YAGNI).** No cooperating mod calls such an
+API today; the generator-only gate already makes other mods' explicitly-created trash survive untouched
+(implicit exclusion at zero API cost). If a future cooperating mod genuinely needs it, the one-line upgrade is
+to expose a `public static bool RouteHook.Active` probe (and optionally a `Materialize(TrashItem)` that just
+sets `Suppress` around a re-create) - add it when there is a caller, not before.

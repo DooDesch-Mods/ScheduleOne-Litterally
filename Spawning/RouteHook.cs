@@ -22,7 +22,20 @@ namespace Trashville.Spawning
     {
         internal static bool Active = false;                 // real routing: absorb game trash into the instanced field
         internal static bool Probe = false;                  // diagnostic: log-only counting (Phase 0)
-        [ThreadStatic] internal static bool Suppress;        // TRUE around mod-owned create calls so they stay REAL (not absorbed)
+        [ThreadStatic] internal static bool Suppress;        // TRUE around OUR OWN create calls so they stay REAL (not absorbed)
+        // Good-citizen gate: absorb ONLY the GAME'S OWN generator trash. Set TRUE only while
+        // TrashGenerator.GenerateTrash / GenerateMaxTrash is running (see the patches at the bottom of this file),
+        // so trash that ANOTHER mod creates directly via TrashManager.CreateTrashItem (outside a generator pass)
+        // is left REAL and keeps working. This is an allowlist (fail-closed: an unknown create is never stolen),
+        // which is strictly safer than Suppress alone (a denylist that only protects creates WE wrap). When OFF
+        // (default), routing never runs at all. Toggle off via `tv route absorbany on` if a user wants the old
+        // absorb-everything behaviour. See docs/ARCHITECTURE.md section 10.
+        internal static bool AbsorbAny = false;              // if true, absorb ALL game trash (legacy), not just generator trash
+        [ThreadStatic] internal static bool GeneratorActive; // TRUE while the game's own generator is creating trash
+        [ThreadStatic] private static int _genDepth;         // shared nesting depth across BOTH generator methods (one may call the other)
+        // Generator patches call these so the absorb window stays open across nested GenerateMaxTrash->GenerateTrash.
+        internal static void EnterGenerator() { if (_genDepth++ == 0) GeneratorActive = true; }
+        internal static void ExitGenerator() { if (--_genDepth <= 0) { _genDepth = 0; GeneratorActive = false; } }
 
         // The game spawns trash ABOVE the ground and lets physics settle it. If we capture the pose immediately
         // it floats, so we keep the real item alive a moment, let it settle, then virtualize at its SETTLED
@@ -50,6 +63,9 @@ namespace Trashville.Spawning
             if (Suppress) return;                            // our own materialize/probe item -> leave real
             if (Probe && !Active) { ProbeNote(isPrivate, result); return; }
             if (!Active || result == null) return;
+            // Good citizen: only absorb the game's OWN generator output. Trash another mod created directly
+            // (no generator pass on the stack) stays real. AbsorbAny restores the legacy absorb-everything mode.
+            if (!GeneratorActive && !AbsorbAny) { Skipped++; return; }
 
             int iid;
             try { iid = result.GetInstanceID(); } catch { return; }
@@ -136,6 +152,7 @@ namespace Trashville.Spawning
         internal static void ResetState()
         {
             _settling.Clear(); _tracked.Clear(); _doneSettling.Clear(); _destroyQueue.Clear();
+            _genDepth = 0; GeneratorActive = false;   // belt-and-suspenders: never leave the absorb window stuck open
         }
 
         private static void ProbeNote(bool isPrivate, TrashItem result)
@@ -191,10 +208,14 @@ namespace Trashville.Spawning
                     {
                         var tm = TrashSpawner.TrashManagerOrNull();
                         int mgr = -1; try { if (tm != null) mgr = TrashSpawner.TrashItemCount(tm); } catch { }
-                        Core.Log?.Msg($"[route] STAT  active={Active}  instanced={InstancedTrash.Count}  realTrashItems(manager)={mgr}  settling={_settling.Count}  absorbed={Absorbed} skippedEchoes={Skipped} atCap={AtCap}");
+                        Core.Log?.Msg($"[route] STAT  active={Active}  absorbMode={(AbsorbAny ? "ANY (legacy)" : "generator-only (good-citizen)")}  instanced={InstancedTrash.Count}  realTrashItems(manager)={mgr}  settling={_settling.Count}  absorbed={Absorbed} skipped(echo+othermod)={Skipped} atCap={AtCap}");
                         if (Probe) Core.Log?.Msg($"[route-probe]  public calls={PubCalls} distinct={_distinctPub.Count}  private calls={PrivCalls} distinct={_distinctPriv.Count}");
                         break;
                     }
+                case "absorbany":
+                    AbsorbAny = p.Length > 3 ? (p[3] == "on" || p[3] == "1" || p[3] == "true") : !AbsorbAny;
+                    Core.Log?.Msg($"[route] absorbAny = {AbsorbAny} ({(AbsorbAny ? "absorb ALL trash incl. other mods' - legacy" : "absorb ONLY the game generator's trash - good-citizen default")}).");
+                    break;
                 case "testlimit":
                     // EMPIRICALLY RESOLVED 2026-06-19: reading TrashManager.TRASH_ITEM_LIMIT is fine (=2000), but
                     // WRITING it hard-crashes the game (log stops mid-write, process dies). It is NOT a literal
@@ -207,7 +228,7 @@ namespace Trashville.Spawning
                     try { var tm = TrashSpawner.TrashManagerOrNull(); if (tm != null) tm.DestroyAllTrash(); Core.Log?.Msg("[route] DestroyAllTrash()"); } catch (Exception e) { Core.Log?.Warning("[route] clear failed: " + e.Message); }
                     break;
                 default:
-                    Core.Log?.Msg("[route] usage: tv route on|off | boost [mult] | unboost | burst [n] | stat | probe on|off | clearreal");
+                    Core.Log?.Msg("[route] usage: tv route on|off | boost [mult] | unboost | burst [n] | stat | probe on|off | absorbany on|off | clearreal");
                     break;
             }
         }
@@ -243,5 +264,26 @@ namespace Trashville.Spawning
     {
         // Public wrapper - only used for the Phase-0 probe; real absorb dedups so this is harmless when Active.
         private static void Postfix(TrashItem __result) { try { RouteHook.OnCreate(false, __result); } catch { } }
+    }
+
+    // Good-citizen gate: mark the window in which the GAME'S OWN generator creates trash. RouteHook.OnCreate
+    // absorbs ONLY while this window is open, so trash created OUTSIDE a generator pass (another mod's explicit
+    // CreateTrashItem) is left real. GenerateMaxTrash is the natural cadence (Awake/Start/SleepStart);
+    // GenerateTrash(int) is the burst path. Nesting-safe via a depth counter (the methods may call each other).
+    // Exit via a FINALIZER (not a Postfix) so the absorb window always closes even if the generator throws -
+    // otherwise a leaked +1 on the depth counter would leave GeneratorActive stuck true and we'd start stealing
+    // other mods' trash. The finalizer must not swallow the original exception, so it returns it unchanged.
+    [HarmonyPatch(typeof(TrashGenerator), "GenerateMaxTrash")]
+    internal static class TG_GenerateMaxTrash_Patch
+    {
+        private static void Prefix() { RouteHook.EnterGenerator(); }
+        private static Exception Finalizer(Exception __exception) { RouteHook.ExitGenerator(); return __exception; }
+    }
+
+    [HarmonyPatch(typeof(TrashGenerator), "GenerateTrash", new Type[] { typeof(int) })]
+    internal static class TG_GenerateTrash_Patch
+    {
+        private static void Prefix() { RouteHook.EnterGenerator(); }
+        private static Exception Finalizer(Exception __exception) { RouteHook.ExitGenerator(); return __exception; }
     }
 }
