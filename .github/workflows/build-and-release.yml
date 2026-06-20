@@ -5,7 +5,7 @@ name: Build and Release on Tag
 # Thunderstore.
 #
 # Before the first run, set these up (same pattern as the other mods):
-#   - The private build-libs repo DooDesch/ScheduleOne-Workspace must contain: lib/il2cpp/game (game
+#   - The private build-libs repo DooDesch-Mods/ScheduleOne-Workspace must contain: lib/il2cpp/game (game
 #     managed DLLs), lib/il2cpp/melonloader (MelonLoader, 0Harmony, Il2CppInterop.Runtime), lib/il2cpp/s1api
 #     (S1API.Il2Cpp.MelonLoader.dll), lib/modmanager (ModManager&PhoneApp.dll).
 #   - Repo (or org) secrets: WORKSPACE_TOKEN (SSH deploy key for the workspace repo), THUNDERSTORE_TOKEN.

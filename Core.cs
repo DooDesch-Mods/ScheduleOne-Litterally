@@ -12,7 +12,7 @@ using Litterally.Spawning;
 using Litterally.UI;
 #endif
 
-[assembly: MelonInfo(typeof(Litterally.Core), "Litterally", "1.0.0", "DooDesch", "https://github.com/DooDesch/ScheduleOne-Litterally")]
+[assembly: MelonInfo(typeof(Litterally.Core), "Litterally", "1.0.0", "DooDesch", "https://github.com/DooDesch-Mods/ScheduleOne-Litterally")]
 [assembly: MelonGame("TVGS", "Schedule I")]
 [assembly: MelonOptionalDependencies("ModManager&PhoneApp")]
 
