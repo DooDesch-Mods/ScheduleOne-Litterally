@@ -1,0 +1,13 @@
+{
+  "name": "Litterally",
+  "version_number": "1.0.0",
+  "website_url": "https://github.com/DooDesch/ScheduleOne-Litterally",
+  "description": "Litterally more trash, zero lag - routes Schedule I's litter into a cheap instanced field so the map holds far more of it, with no feature loss.",
+  "dependencies": [
+    "LavaGang-MelonLoader-0.7.3",
+    "ifBars-S1API_Forked-3.0.5"
+  ],
+  "contributors": [
+    "DooDesch"
+  ]
+}

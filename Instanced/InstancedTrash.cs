@@ -5,7 +5,7 @@ using UnityEngine.AI;
 using UnityEngine.Rendering;
 using Il2CppInterop.Runtime.InteropTypes.Arrays;
 
-namespace Trashville.Instanced
+namespace Litterally.Instanced
 {
     /// <summary>
     /// The 100k path: trash as pure DATA (flat managed arrays), NO GameObjects. Gravity sim + per-item terrain

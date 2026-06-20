@@ -1,9 +1,9 @@
 using System.Text;
 using UnityEngine;
-using Trashville.Profiling;
-using Trashville.Spawning;
+using Litterally.Profiling;
+using Litterally.Spawning;
 
-namespace Trashville.UI
+namespace Litterally.UI
 {
     /// <summary>
     /// IMGUI on-screen readout (the always-available live evidence display). Drawn from Core.OnGUI.
@@ -53,7 +53,7 @@ namespace Trashville.UI
         private static string Build()
         {
             var sb = new StringBuilder(512);
-            sb.AppendLine("<b>Trashville - Trash Benchmark</b>");
+            sb.AppendLine("<b>Litterally - Trash Benchmark</b>");
 
             FrameStats s = PerfSampler.Snapshot();
             sb.AppendLine($"FPS mean {s.MeanFps:F0}  min {s.MinFps:F0}");
@@ -72,10 +72,10 @@ namespace Trashville.UI
             }
             sb.AppendLine($"GC/1000f: gen0 {PerfSampler.Gc0Per1000Frames():F1}  gen1 {PerfSampler.Gc1Per1000Frames():F1}");
 
-            int inst = Trashville.Instanced.InstancedTrash.Count;
+            int inst = Litterally.Instanced.InstancedTrash.Count;
             if (inst > 0)
             {
-                sb.AppendLine($"instanced {inst} (live {Trashville.Instanced.InstancedTrash.LiveCount})  drawn {Trashville.Instanced.InstancedTrash.Drawn} (culled)  real {Trashville.Instanced.Virtualizer.RealCount}");
+                sb.AppendLine($"instanced {inst} (live {Litterally.Instanced.InstancedTrash.LiveCount})  drawn {Litterally.Instanced.InstancedTrash.Drawn} (culled)  real {Litterally.Instanced.Virtualizer.RealCount}");
             }
 
             sb.Append("armed: ").Append(Config.Preferences.ArmBenchmark ? "YES" : "no");

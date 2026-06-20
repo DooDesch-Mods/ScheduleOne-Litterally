@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using Il2CppScheduleOne.Trash;
 
-namespace Trashville.Spawning
+namespace Litterally.Spawning
 {
     /// <summary>
     /// Drives the GAME'S OWN trash generation harder, then lets routing absorb it into the cheap instanced field.

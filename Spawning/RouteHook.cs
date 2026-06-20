@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using UnityEngine;
 using HarmonyLib;
 using Il2CppScheduleOne.Trash;
-using Trashville.Instanced;
+using Litterally.Instanced;
 
-namespace Trashville.Spawning
+namespace Litterally.Spawning
 {
     /// <summary>
     /// Routes the GAME'S own generated trash through our instanced field so the game can spawn far more trash at

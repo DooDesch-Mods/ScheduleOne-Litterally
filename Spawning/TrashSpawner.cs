@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using Il2CppInterop.Runtime.InteropTypes.Arrays;
 using Il2CppScheduleOne.Audio;   // RBImpactSounds
 
-namespace Trashville.Spawning
+namespace Litterally.Spawning
 {
     /// <summary>
     /// Batched trash spawner. Discovers the real prefab ids from TrashManager.TrashPrefabs,

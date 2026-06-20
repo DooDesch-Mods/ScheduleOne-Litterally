@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace Trashville.UI
+namespace Litterally.UI
 {
     /// <summary>
     /// Minimal, release-safe on-screen FPS readout (top-right). Opt-in via Preferences.ShowFpsCounter (default

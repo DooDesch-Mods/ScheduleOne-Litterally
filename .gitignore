@@ -6,6 +6,9 @@ obj/
 .vs/
 *.user
 
+# AI tooling state (worktrees, local agent config) - never ship in the mod repo
+.claude/
+
 # Debug
 Mods/
 

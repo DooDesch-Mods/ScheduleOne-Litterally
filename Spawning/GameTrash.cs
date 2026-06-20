@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace Trashville.Spawning
+namespace Litterally.Spawning
 {
     /// <summary>
     /// Tiny always-compiled bridge to the game's trash + player state. Holds the three lookups the

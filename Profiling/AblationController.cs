@@ -3,15 +3,15 @@ using System.Globalization;
 using System.IO;
 using UnityEngine;
 using Il2CppInterop.Runtime.InteropTypes.Arrays;
-using Trashville.Spawning;
+using Litterally.Spawning;
 
-namespace Trashville.Profiling
+namespace Litterally.Profiling
 {
     /// <summary>
     /// Drives the automated benchmark: for each trash count it records the all-on SETTLING and SETTLED
     /// frame cost, then toggles one subsystem off at a time and records the frame-time delta. The deltas
     /// (not any profiler counter) are the build-independent evidence of which subsystem costs the most.
-    /// Output is a CSV under Mods/Trashville/runs/.
+    /// Output is a CSV under Mods/Litterally/runs/.
     /// </summary>
     internal static class AblationController
     {
@@ -334,7 +334,7 @@ namespace Trashville.Profiling
         {
             try
             {
-                string dir = Path.Combine(Directory.GetCurrentDirectory(), "Mods", "Trashville", "runs");
+                string dir = Path.Combine(Directory.GetCurrentDirectory(), "Mods", "Litterally", "runs");
                 Directory.CreateDirectory(dir);
                 string runId = "sweep_" + DateTime.Now.ToString("yyyyMMdd_HHmmss", CultureInfo.InvariantCulture);
                 string path = Path.Combine(dir, runId + ".csv");

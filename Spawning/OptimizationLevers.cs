@@ -1,7 +1,7 @@
 using UnityEngine;
 using Il2CppInterop.Runtime.InteropTypes.Arrays;
 
-namespace Trashville.Spawning
+namespace Litterally.Spawning
 {
     /// <summary>
     /// Applies the per-object physics-optimization levers to a bypass clone at spawn time. Step 1: no-op

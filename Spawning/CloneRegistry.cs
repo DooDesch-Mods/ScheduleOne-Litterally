@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using Il2CppInterop.Runtime.InteropTypes.Arrays;
 
-namespace Trashville.Spawning
+namespace Litterally.Spawning
 {
     /// <summary>One spawned clone (Strategy B): a raw GameObject we own, plus its cached Rigidbody.</summary>
     internal sealed class Clone

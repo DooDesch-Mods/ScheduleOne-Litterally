@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using Unity.Profiling;
 
-namespace Trashville.Profiling
+namespace Litterally.Profiling
 {
     internal enum CounterState { Unavailable, Suspect, Measured }
 

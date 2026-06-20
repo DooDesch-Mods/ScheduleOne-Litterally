@@ -2,9 +2,9 @@ using System;
 using System.Text;
 using UnityEngine;
 using Il2CppInterop.Runtime.InteropTypes.Arrays;
-using Trashville.Spawning;
+using Litterally.Spawning;
 
-namespace Trashville.Profiling
+namespace Litterally.Profiling
 {
     /// <summary>
     /// Dumps the ACTUAL runtime physics config of a real game trash item + the global Physics settings,

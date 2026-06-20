@@ -1,9 +1,9 @@
 using System;
 using System.Globalization;
 using UnityEngine;
-using Trashville.Spawning;
+using Litterally.Spawning;
 
-namespace Trashville.Profiling
+namespace Litterally.Profiling
 {
     /// <summary>
     /// Clean physics A/B on the SAME items (minimal baseline drift): spawn N dynamic, measure the active

@@ -4,9 +4,9 @@ using UnityEngine;
 using Il2CppScheduleOne.Trash;
 using Il2CppScheduleOne.Employees;
 using Il2CppScheduleOne.DevUtilities;
-using Trashville.Instanced;
+using Litterally.Instanced;
 
-namespace Trashville.Spawning
+namespace Litterally.Spawning
 {
     /// <summary>
     /// Keeps base-game Cleaner NPCs working with the instanced field. A Cleaner's native AI only acts on real

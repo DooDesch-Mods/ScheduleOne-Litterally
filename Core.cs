@@ -1,25 +1,25 @@
 using System;
 using MelonLoader;
 using S1API.Lifecycle;
-using Trashville.Compat;
-using Trashville.Config;
+using Litterally.Compat;
+using Litterally.Config;
 #if DEBUG
-using Trashville.Profiling;
+using Litterally.Profiling;
 #endif
-using Trashville.SaveGuard;
-using Trashville.Spawning;
+using Litterally.SaveGuard;
+using Litterally.Spawning;
 #if DEBUG
-using Trashville.UI;
+using Litterally.UI;
 #endif
 
-[assembly: MelonInfo(typeof(Trashville.Core), "Trashville", "1.0.0", "DooDesch", null)]
+[assembly: MelonInfo(typeof(Litterally.Core), "Litterally", "1.0.0", "DooDesch", "https://github.com/DooDesch/ScheduleOne-Litterally")]
 [assembly: MelonGame("TVGS", "Schedule I")]
 [assembly: MelonOptionalDependencies("ModManager&PhoneApp")]
 
-namespace Trashville
+namespace Litterally
 {
     /// <summary>
-    /// MelonLoader entry point for the Trashville trash-performance mod. The release build routes the game's own
+    /// MelonLoader entry point for the Litterally trash-performance mod. The release build routes the game's own
     /// generated trash into a cheap instanced field (rendered cheaply, materialized into real pickup-able items
     /// near the player + cleaners) so the world can hold far more trash with little cost. DEBUG builds additionally
     /// wire the benchmark/ablation harness (spawn pump, perf sampler, on-screen HUD, dev hotkeys + console).
@@ -65,10 +65,10 @@ namespace Trashville
             HookModManager();
 
 #if DEBUG
-            Log.Msg("Trashville v1.0.0 (DEBUG) - trash performance layer active. Dev hotkeys: F5 ARM, F7/F8/F9 spawn 100/1k/10k, F11 sweep, F6 HUD.");
-            Log.Warning("Trashville DEBUG: the benchmark spawns thousands of TEMPORARY trash - use a throwaway save. It auto-clears on save/scene-change/quit.");
+            Log.Msg("Litterally v1.0.0 (DEBUG) - trash performance layer active. Dev hotkeys: F5 ARM, F7/F8/F9 spawn 100/1k/10k, F11 sweep, F6 HUD.");
+            Log.Warning("Litterally DEBUG: the benchmark spawns thousands of TEMPORARY trash - use a throwaway save. It auto-clears on save/scene-change/quit.");
 #else
-            Log.Msg("Trashville v1.0.0 - trash performance layer active.");
+            Log.Msg("Litterally v1.0.0 - trash performance layer active.");
 #endif
         }
 
@@ -287,7 +287,7 @@ namespace Trashville
             TelemetryTick();                                 // compact periodic status line (release has no HUD)
 
 #if DEBUG
-            // Crash-resilient heartbeat: after a hard crash, Mods/Trashville/heartbeat.txt holds the
+            // Crash-resilient heartbeat: after a hard crash, Mods/Litterally/heartbeat.txt holds the
             // last frame's state. Distinguishes a spawn-time death (count climbing) from a post-spawn
             // / steady-state death (count steady at N, e.g. rendering).
             _frame++;

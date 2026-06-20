@@ -4,7 +4,7 @@ using UnityEngine;
 using Il2CppScheduleOne.DevUtilities;
 using Il2CppScheduleOne.Persistence;
 
-namespace Trashville.Instanced
+namespace Litterally.Instanced
 {
     /// <summary>
     /// Persists the ROUTED instanced trash field as ONE compact binary file inside the current save folder, so
@@ -22,7 +22,7 @@ namespace Trashville.Instanced
                 // Key the blob to the CURRENT save (e.g. <steamid>/SaveGame_2) but store it in a MOD-owned folder
                 // OUTSIDE the game's save folder. Writing inside the save folder does NOT work: the game's save
                 // process runs DeleteUnapprovedFiles(saveFolder) and prunes any file it didn't write - it deleted
-                // our blob right after we wrote it (verified: the file vanished). persistentDataPath/Trashville is
+                // our blob right after we wrote it (verified: the file vanished). persistentDataPath/Litterally is
                 // a sibling of Saves, so it is never pruned.
                 LoadManager lm = PersistentSingleton<LoadManager>.Instance;
                 string saveFolder = lm != null ? lm.LoadedGameFolderPath : null;
@@ -32,7 +32,7 @@ namespace Trashville.Instanced
                 string key = parts.Length >= 2 ? parts[parts.Length - 2] + "_" + parts[parts.Length - 1]
                                                : parts[parts.Length - 1];
                 foreach (char c in Path.GetInvalidFileNameChars()) key = key.Replace(c, '_');
-                string dir = Path.Combine(Application.persistentDataPath, "Trashville", "saves");
+                string dir = Path.Combine(Application.persistentDataPath, "Litterally", "saves");
                 Directory.CreateDirectory(dir);
                 return Path.Combine(dir, key + ".tvb");
             }

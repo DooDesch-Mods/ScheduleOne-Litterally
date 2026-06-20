@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using Il2CppScheduleOne.Trash;
 
-namespace Trashville.Spawning
+namespace Litterally.Spawning
 {
     /// <summary>
     /// Makes the game's own TrashGenerators spawn far more by raising each generator's MaxTrashCount (the one lever

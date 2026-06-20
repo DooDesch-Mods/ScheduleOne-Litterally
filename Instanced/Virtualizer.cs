@@ -4,7 +4,7 @@ using UnityEngine;
 using UnityEngine.Rendering;
 using Il2CppInterop.Runtime.InteropTypes.Arrays;
 
-namespace Trashville.Instanced
+namespace Litterally.Instanced
 {
     /// <summary>
     /// Makes the virtual field behave 1:1 like base-game trash WITHOUT paying for 100k GameObjects: each frame it

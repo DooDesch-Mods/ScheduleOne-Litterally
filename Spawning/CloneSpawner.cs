@@ -5,7 +5,7 @@ using Il2CppInterop.Runtime.InteropTypes.Arrays;
 using Il2CppScheduleOne.Audio;       // RBImpactSounds
 using Il2CppScheduleOne.Dragging;    // Draggable
 
-namespace Trashville.Spawning
+namespace Litterally.Spawning
 {
     /// <summary>
     /// Cap-bypass spawner (Strategy B). Caches ONE stripped, INACTIVE template per trash id, then

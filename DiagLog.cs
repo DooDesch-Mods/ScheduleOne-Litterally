@@ -2,13 +2,13 @@ using System;
 using System.Globalization;
 using System.IO;
 
-namespace Trashville
+namespace Litterally
 {
     /// <summary>
     /// Crash-resilient diagnostic logging. MelonLogger buffers, so a HARD native crash loses the last
     /// lines - which is exactly why we never see the death point. DiagLog flushes to DISK on every write
     /// (Note) and rewrites a tiny heartbeat file every frame (Heartbeat). After a crash these files hold
-    /// the exact last state. Files: Mods/Trashville/diag.log and Mods/Trashville/heartbeat.txt.
+    /// the exact last state. Files: Mods/Litterally/diag.log and Mods/Litterally/heartbeat.txt.
     /// </summary>
     internal static class DiagLog
     {
@@ -25,7 +25,7 @@ namespace Trashville
             }
             try
             {
-                string dir = Path.Combine(Directory.GetCurrentDirectory(), "Mods", "Trashville");
+                string dir = Path.Combine(Directory.GetCurrentDirectory(), "Mods", "Litterally");
                 Directory.CreateDirectory(dir);
                 _heartbeatPath = Path.Combine(dir, "heartbeat.txt");
                 _fs = new FileStream(Path.Combine(dir, "diag.log"), FileMode.Append, FileAccess.Write, FileShare.ReadWrite);

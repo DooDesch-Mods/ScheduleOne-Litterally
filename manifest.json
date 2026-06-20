@@ -1,9 +1,0 @@
-{
-  "name": "Trashville",
-  "version_number": "1.0.0",
-  "website_url": "",
-  "description": "Routes the game's trash into a cheap instanced field so the map can hold far more of it, with no feature loss.",
-  "dependencies": [
-    "ifBars-S1API_Forked-3.0.5"
-  ]
-}

@@ -1,17 +1,17 @@
 using MelonLoader;
 using UnityEngine;
 
-namespace Trashville.Config
+namespace Litterally.Config
 {
     /// <summary>
-    /// MelonPreferences wrapper. The category id is prefixed with the mod name ("Trashville_...")
+    /// MelonPreferences wrapper. The category id is prefixed with the mod name ("Litterally_...")
     /// so it is auto-detected by the "Mod Manager &amp; Phone App" settings UI (Prowiler).
     /// Release entries (the performance layer) are always registered. The benchmark/dev entries -
     /// including the one-shot "button" toggles - only register in DEBUG builds.
     /// </summary>
     internal static class Preferences
     {
-        private const string CategoryId = "Trashville_01_Main";
+        private const string CategoryId = "Litterally_01_Main";
 
         private static MelonPreferences_Category _category;
 
@@ -57,9 +57,9 @@ namespace Trashville.Config
             }
 
 #if DEBUG
-            _category = MelonPreferences.CreateCategory(CategoryId, "Trashville (Trash Performance + Benchmark)");
+            _category = MelonPreferences.CreateCategory(CategoryId, "Litterally (Trash Performance + Benchmark)");
 #else
-            _category = MelonPreferences.CreateCategory(CategoryId, "Trashville (Trash Performance)");
+            _category = MelonPreferences.CreateCategory(CategoryId, "Litterally (Trash Performance)");
 #endif
 
             // ----- release performance-layer entries -----
@@ -142,7 +142,7 @@ namespace Trashville.Config
             _btnSpawn10000 = Create("Spawn10000", false, "> Spawn 10,000 (one-shot)", "Toggle ON to spawn 10,000 trash around you. Auto-resets.");
             _btnClear = Create("ClearTrash", false, "> Clear MY benchmark trash (one-shot)", "Toggle ON to destroy only the trash this mod spawned. Auto-resets.");
             _btnPurgeAll = Create("PurgeAllTrash", false, "> PURGE ALL world trash (one-shot)", "Toggle ON to call DestroyAllTrash() - removes ALL trash in the world, including legitimate trash. Recovery for a bloated save. Auto-resets.");
-            _btnRunSweep = Create("RunSweep", false, "> Run automated benchmark sweep (one-shot)", "Toggle ON to run the full spawn + ablation sweep and write a CSV under Mods/Trashville/runs/. Auto-resets.");
+            _btnRunSweep = Create("RunSweep", false, "> Run automated benchmark sweep (one-shot)", "Toggle ON to run the full spawn + ablation sweep and write a CSV under Mods/Litterally/runs/. Auto-resets.");
 #endif
         }
 

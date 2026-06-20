@@ -1,7 +1,7 @@
 using System;
-using Trashville.Spawning;
+using Litterally.Spawning;
 
-namespace Trashville.SaveGuard
+namespace Litterally.SaveGuard
 {
     /// <summary>
     /// CRITICAL: nothing the performance layer materialises may reach the player's save. The routed instanced
@@ -25,21 +25,21 @@ namespace Trashville.SaveGuard
         {
             // Routing: drain the transient destroy queue so no half-absorbed real item lingers, and un-boost the
             // generators. Do NOT turn routing OFF in release - it must keep absorbing after the save completes.
-            Trashville.Spawning.RouteHook.Tick();
-            Trashville.Spawning.GeneratorBoost.Restore();
-            Trashville.Instanced.Virtualizer.ClearAll();          // destroy any materialized (player) real items (don't persist)
-            Trashville.Spawning.CleanerActor.ClearAll();          // destroy any cleaner-materialized real items (don't persist)
-            Trashville.Instanced.InstancedTrash.AbortCalibration(); // destroy any in-flight calibration probes (real Saveable items)
-            Trashville.Instanced.InstancedTrash.AbortDrift();      // destroy any in-flight ground-drift probes (real Saveable items)
+            Litterally.Spawning.RouteHook.Tick();
+            Litterally.Spawning.GeneratorBoost.Restore();
+            Litterally.Instanced.Virtualizer.ClearAll();          // destroy any materialized (player) real items (don't persist)
+            Litterally.Spawning.CleanerActor.ClearAll();          // destroy any cleaner-materialized real items (don't persist)
+            Litterally.Instanced.InstancedTrash.AbortCalibration(); // destroy any in-flight calibration probes (real Saveable items)
+            Litterally.Instanced.InstancedTrash.AbortDrift();      // destroy any in-flight ground-drift probes (real Saveable items)
 
 #if DEBUG
             // Benchmark-only: stop absorbing, drop in-flight routing state, then nuke ALL world trash because the
             // benchmark spawner + bypass clones create real game trash that DestroyAllTrash / the registries clean
             // up. None of this exists in Release (no spawner, no clones), so it is gated out.
             TrashSpawner.CancelPending();
-            Trashville.Spawning.RouteHook.Active = false;
-            Trashville.Spawning.RouteHook.Tick();
-            Trashville.Spawning.RouteHook.ResetState();
+            Litterally.Spawning.RouteHook.Active = false;
+            Litterally.Spawning.RouteHook.Tick();
+            Litterally.Spawning.RouteHook.ResetState();
 
             // Bypass clones are GameObjects we own and are NOT in tm.trashItems, so DestroyAllTrash misses
             // them - destroy them ourselves on every save/teardown path or 10k objects leak into the session.
@@ -52,7 +52,7 @@ namespace Trashville.SaveGuard
             // The instanced path creates real TrashItems (calibration probes + materialized items) WITHOUT ever
             // touching TrashRegistry, so EverSpawned alone cannot tell us a sweep is unnecessary - OR in the
             // instanced flag too, or a probe/materialized item could be serialized into the player's save.
-            bool instancedReals = Trashville.Instanced.InstancedTrash.EverMaterialized;
+            bool instancedReals = Litterally.Instanced.InstancedTrash.EverMaterialized;
             if (!TrashRegistry.EverSpawned && TrashRegistry.Count == 0 && !instancedReals)
             {
                 if (clones > 0)

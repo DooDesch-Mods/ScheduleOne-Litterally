@@ -1,18 +1,18 @@
 using System;
 using System.Globalization;
 using HarmonyLib;
-using Trashville.Config;
-using Trashville.Profiling;
-using Trashville.Spawning;
+using Litterally.Config;
+using Litterally.Profiling;
+using Litterally.Spawning;
 
-namespace Trashville
+namespace Litterally
 {
     /// <summary>
     /// Drives the whole mod through the game dev console (so the Schedule1 MCP / run_console_command can
     /// test it headlessly). All commands are namespaced "tv ...". Two Harmony prefixes catch both
     /// Console.SubmitCommand overloads and swallow our commands so the game does not report them as unknown.
     /// </summary>
-    internal static class TrashvilleConsole
+    internal static class LitterallyConsole
     {
         internal static bool TryHandle(string raw)
         {
@@ -227,7 +227,7 @@ namespace Trashville
     {
         private static bool Prefix(string args)
         {
-            try { return !TrashvilleConsole.TryHandle(args); } catch { return true; }
+            try { return !LitterallyConsole.TryHandle(args); } catch { return true; }
         }
     }
 
@@ -236,7 +236,7 @@ namespace Trashville
     {
         private static bool Prefix(Il2CppSystem.Collections.Generic.List<string> args)
         {
-            try { return !TrashvilleConsole.TryHandle(args); } catch { return true; }
+            try { return !LitterallyConsole.TryHandle(args); } catch { return true; }
         }
     }
 }

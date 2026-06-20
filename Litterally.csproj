@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    Trashville - MelonLoader IL2CPP trash performance mod for Schedule I.
+    Litterally - MelonLoader IL2CPP trash performance mod for Schedule I.
     Routes the game's own generated trash into a cheap instanced field so the world can hold far more
     trash at high performance, materialising real pickup-able items near the player + cleaners.
     DEBUG builds also include the benchmark / ablation harness; Release excludes the dev files (below).
@@ -15,8 +15,8 @@
     <LangVersion>latest</LangVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <IsPackable>false</IsPackable>
-    <RootNamespace>Trashville</RootNamespace>
-    <AssemblyName>Trashville</AssemblyName>
+    <RootNamespace>Litterally</RootNamespace>
+    <AssemblyName>Litterally</AssemblyName>
     <NeutralLanguage>en-US</NeutralLanguage>
     <Version>1.0.0</Version>
     <AssemblyVersion>1.0.0.0</AssemblyVersion>
@@ -62,7 +62,7 @@
     <Compile Remove="Profiling/PhysicsProbe.cs" />
     <Compile Remove="Profiling/PhysicsConfigDump.cs" />
     <Compile Remove="UI/DebugHud.cs" />
-    <Compile Remove="TrashvilleConsole.cs" />
+    <Compile Remove="LitterallyConsole.cs" />
     <Compile Remove="DiagLog.cs" />
     <Compile Remove="Spawning/TrashSpawner.cs" />
     <Compile Remove="Spawning/TrashRegistry.cs" />

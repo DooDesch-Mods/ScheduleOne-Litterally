@@ -1,7 +1,7 @@
 using System;
 using Il2CppScheduleOne.Networking;   // Lobby (PersistentSingleton<Lobby>)
 
-namespace Trashville.Compat
+namespace Litterally.Compat
 {
     /// <summary>
     /// Best-effort detection of a real multiplayer session (more than one player), used to auto-disable the

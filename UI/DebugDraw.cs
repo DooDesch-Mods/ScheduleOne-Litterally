@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace Trashville.UI
+namespace Litterally.UI
 {
     /// <summary>
     /// Release-safe world-space debug overlays drawn in screen space (no GL / no Shader.Find): project world

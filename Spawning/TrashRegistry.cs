@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace Trashville.Spawning
+namespace Litterally.Spawning
 {
     /// <summary>
     /// The single source of truth for the trash items WE spawned. Ablation toggles and the

@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace Trashville.UI
+namespace Litterally.UI
 {
     /// <summary>
     /// Release-safe live stats panel (opt-in via Preferences.ShowStatsPanel, default OFF). Puts the same numbers
@@ -52,7 +52,7 @@ namespace Trashville.UI
             int rp = Instanced.Virtualizer.RealCount;
             int rc = Spawning.CleanerActor.RealCount;
             float mr = Instanced.Virtualizer.MatRadius;
-            return "Trashville\n" +
+            return "Litterally\n" +
                    $"field-live   {live} / {total}\n" +
                    $"drawn        {drawn}\n" +
                    $"real player  {rp}\n" +

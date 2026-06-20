@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace Trashville.Instanced
+namespace Litterally.Instanced
 {
     /// <summary>
     /// Camera view-frustum maths, shared by the Virtualizer (which items to materialize) and the instanced
