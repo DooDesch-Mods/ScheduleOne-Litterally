@@ -54,7 +54,7 @@ namespace Litterally.Spawning
                 return;
             }
 
-            // Phase 2 cap-bypass (Strategy B): spawn direct clones that never touch TrashManager, so the
+            // Cap-bypass: spawn direct clones that never touch TrashManager, so the
             // 2000 cap / eviction does not apply. No clamp - queue the full count.
             if (Config.Preferences.BypassCap)
             {
@@ -67,7 +67,7 @@ namespace Litterally.Spawning
 
             // The game hard-caps LIVE trash at the const TRASH_ITEM_LIMIT (=2000) and evicts the oldest
             // when you create more - that churn is the "trash keeps despawning". So we cap our request to
-            // fit under the limit: a stable pile, no eviction. Exceeding 2000 needs a Phase-2 limit bypass.
+            // fit under the limit: a stable pile, no eviction. Exceeding 2000 needs the cap bypass (BypassCap).
             int limit = SafeLimit();
             int existing = TrashItemCount(tm);
             // Account for items already queued (_pending) so repeated F9 presses don't over-queue past the cap.
@@ -82,7 +82,7 @@ namespace Litterally.Spawning
             }
             if (toSpawn < count)
             {
-                Core.Log?.Warning($"[Spawn] Game caps LIVE trash at {limit} (existing {existing}). Spawning {toSpawn}; more would just evict older trash. 10000 needs a TRASH_ITEM_LIMIT bypass (Phase 2).");
+                Core.Log?.Warning($"[Spawn] Game caps LIVE trash at {limit} (existing {existing}). Spawning {toSpawn}; more would just evict older trash. 10000 needs a TRASH_ITEM_LIMIT bypass.");
             }
 
             _consecutiveNulls = 0;

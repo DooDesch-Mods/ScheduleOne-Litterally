@@ -1,7 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- Optional Snitch profiler in Debug builds (no-op when the Snitch host is absent). -->
-  <Import Project="$(MSBuildThisFileDirectory)../Workspace/build/Snitch.props" />
+  <!-- Optional Snitch profiler in Debug builds (no-op when the Snitch host is absent). Exists-guarded so
+       CI (where the Workspace repo is checked out to ./Workspace, not ../Workspace) just skips it and the
+       Release build stays clean. -->
+  <Import Project="$(MSBuildThisFileDirectory)../Workspace/build/Snitch.props" Condition="Exists('$(MSBuildThisFileDirectory)../Workspace/build/Snitch.props')" />
 
   <!--
     Litterally - MelonLoader IL2CPP trash performance mod for Schedule I.

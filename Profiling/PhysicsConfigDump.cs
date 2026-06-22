@@ -8,7 +8,7 @@ namespace Litterally.Profiling
 {
     /// <summary>
     /// Dumps the ACTUAL runtime physics config of a real game trash item + the global Physics settings,
-    /// so Phase-2 optimization levers are chosen from ground truth (which knobs have headroom), not guesses.
+    /// so the optimization levers are chosen from ground truth (which knobs have headroom), not guesses.
     /// Trigger: F2. Spawns one item if none exist, then logs everything.
     /// </summary>
     internal static class PhysicsConfigDump

@@ -13,7 +13,7 @@ namespace Litterally.Spawning
     /// pose, records it as pure DATA in InstancedTrash (rendered cheaply, materialized near the player for pickup),
     /// and destroys the real GameObject - so the world fills with trash without paying for N real objects/saveables.
     ///
-    /// Phase-0 findings drive the design: each logical spawn fires CreateAndReturnTrashItem + CreateTrashItem twice
+    /// The design accounts for the game's create pattern: each logical spawn fires CreateAndReturnTrashItem + CreateTrashItem twice
     /// each (public wraps private; FishNet echoes server+observer), all referencing the SAME real item. So we
     /// dedup by instance id (absorb exactly once) and patch the private creator. The DestroyTrash is DEFERRED to
     /// our per-frame Tick (not done inside the postfix) so we never delete the item mid RPC-fan-out.
@@ -21,7 +21,7 @@ namespace Litterally.Spawning
     internal static class RouteHook
     {
         internal static bool Active = false;                 // real routing: absorb game trash into the instanced field
-        internal static bool Probe = false;                  // diagnostic: log-only counting (Phase 0)
+        internal static bool Probe = false;                  // diagnostic: log-only counting
         [ThreadStatic] internal static bool Suppress;        // TRUE around OUR OWN create calls so they stay REAL (not absorbed)
         // Good-citizen gate: absorb ONLY the GAME'S OWN generator trash. Set TRUE only while
         // TrashGenerator.GenerateTrash / GenerateMaxTrash is running (see the patches at the bottom of this file),
@@ -47,13 +47,14 @@ namespace Litterally.Spawning
         private static readonly List<int> _doneSettling = new List<int>();
         private static readonly List<TrashItem> _destroyQueue = new List<TrashItem>();
         internal static int Absorbed, Skipped, AtCap;
+        internal static int SettlingCount => _settling.Count;   // read-only: items mid-settle awaiting virtualization (Snitch state)
         private const int SettleMinFrames = 6;       // let it actually start falling before judging it settled
         private const int SettleMaxFrames = 150;     // ~2.5s cap: virtualize even if it never fully sleeps
         private const float SettleVel2 = 0.01f;
         private const int SettleRestFrames = 8;      // require SUSTAINED rest (this many consecutive low-velocity frames) before capturing, so a tipping/wobbling item finishes settling instead of freezing mid-tip in an odd pose (e.g. a bottle balanced on its edge)
         private const int SettlingCap = 1200;        // burst overflow: above this, ground-snap immediately instead of tracking
 
-        // ----- Phase 0 diagnostic counters -----
+        // ----- diagnostic counters -----
         internal static int PubCalls, PrivCalls;
         private static readonly HashSet<int> _distinctPub = new HashSet<int>();
         private static readonly HashSet<int> _distinctPriv = new HashSet<int>();
@@ -269,7 +270,7 @@ namespace Litterally.Spawning
     [HarmonyPatch(typeof(TrashManager), "CreateTrashItem", new Type[] { typeof(string), typeof(Vector3), typeof(Quaternion), typeof(Vector3), typeof(string), typeof(bool) })]
     internal static class TM_CreateTrashItem_Patch
     {
-        // Public wrapper - only used for the Phase-0 probe; real absorb dedups so this is harmless when Active.
+        // Public wrapper - only used for the diagnostic probe; real absorb dedups so this is harmless when Active.
         private static void Postfix(TrashItem __result) { try { RouteHook.OnCreate(false, __result); } catch { } }
     }
 
