@@ -33,6 +33,13 @@ namespace Litterally.Instanced
         internal static bool Shadows = false;
         internal static int MaxTypes = 8;            // runtime-switchable (tv maxtypes N): 1 = single type, 8 = variety
         internal static string OnlyType = null;      // debug: if set, build the palette with ONLY this type id
+#if SNITCH
+        // Snitch ablation-lever gates (Debug only; Release never carries them). 'litterally.render' early-returns
+        // Render() to isolate the native GPU instanced-draw + CPU frustum-cull cost; 'litterally.sim' skips the
+        // per-frame gravity integration (confirms the instanced field is near-free when items are already settled).
+        internal static bool RenderEnabled = true;
+        internal static bool SimEnabled = true;
+#endif
 
         // ----- type palette (one render set per distinct mesh PART) -----
         private sealed class Part
@@ -173,6 +180,9 @@ namespace Litterally.Instanced
                 if (Calibration.Tick()) BuildPending();
                 return;
             }
+#if SNITCH
+            if (!SimEnabled) return;   // ablation lever 'litterally.sim': skip the gravity integration
+#endif
 
             if (_active <= 0 || _count <= 0 || dt <= 0f) return;
 
@@ -193,6 +203,9 @@ namespace Litterally.Instanced
 
         internal static void Render()
         {
+#if SNITCH
+            if (!RenderEnabled) { _lastDrawn = 0; return; }   // ablation lever 'litterally.render'
+#endif
             if (_count <= 0 || _types == null || _batch == null) return;
             try
             {

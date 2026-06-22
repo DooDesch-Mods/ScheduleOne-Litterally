@@ -11,6 +11,9 @@ using Litterally.Spawning;
 #if DEBUG
 using Litterally.UI;
 #endif
+#if SNITCH
+using Snitch.Api;                 // Profiler section timing (Debug + EnableSnitch only; no-op when host absent)
+#endif
 
 [assembly: MelonInfo(typeof(Litterally.Core), "Litterally", "1.0.0", "DooDesch", "https://github.com/DooDesch-Mods/ScheduleOne-Litterally")]
 [assembly: MelonGame("TVGS", "Schedule I")]
@@ -274,15 +277,29 @@ namespace Litterally
 #endif
 
             // ----- always-compiled performance layer -----
+            // Snitch (Debug only): decompose the per-frame cost into named sections so the profiler can attribute
+            // time to routing vs gravity-sim vs materialization vs the GPU-instanced render. No-op in Release.
+#if SNITCH
+            using (Profiler.Sample("Litterally.Route")) RouteHook.Tick();
+            using (Profiler.Sample("Litterally.Sim")) Instanced.InstancedTrash.Tick(Time.deltaTime);
+#else
             RouteHook.Tick();                                // drain absorbed game-trash reals (destroy after RPC fan-out)
             Instanced.InstancedTrash.Tick(Time.deltaTime);   // pure-array gravity sim
+#endif
 #if DEBUG
             Instanced.InstancedTrash.DriftTick(Time.deltaTime); // ground-drift self-test timer (no-op unless armed)
 #endif
+#if SNITCH
+            using (Profiler.Sample("Litterally.Virtualize")) Instanced.Virtualizer.Tick();
+            using (Profiler.Sample("Litterally.Cleaner")) Spawning.CleanerActor.Tick();
+            using (Profiler.Sample("Litterally.Populate")) Spawning.TrashPopulator.Tick(Time.deltaTime);
+            using (Profiler.Sample("Litterally.Render")) Instanced.InstancedTrash.Render();
+#else
             Instanced.Virtualizer.Tick();                    // materialize near-player instances -> real trash
             Spawning.CleanerActor.Tick();                    // materialize near-cleaner instances -> real trash (NPCs collect them)
             Spawning.TrashPopulator.Tick(Time.deltaTime);    // drive the game's generators harder near the player -> routed into the field
             Instanced.InstancedTrash.Render();               // GPU-instanced render; no-op until set up
+#endif
 
             TelemetryTick();                                 // compact periodic status line (release has no HUD)
 

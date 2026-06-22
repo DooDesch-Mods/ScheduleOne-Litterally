@@ -4,6 +4,9 @@ using UnityEngine;
 using HarmonyLib;
 using Il2CppScheduleOne.Trash;
 using Litterally.Instanced;
+#if SNITCH
+using Snitch.Api;                 // Profiler sub-section timing (Debug + EnableSnitch only)
+#endif
 
 namespace Litterally.Spawning
 {
@@ -122,6 +125,13 @@ namespace Litterally.Spawning
         {
             if (_settling.Count > 0)
             {
+                // Snitch (Debug): the settling pass is the per-frame active-physics churn (velocity checks + the
+                // ground-snap Physics.Raycast inside Record) - the prior-identified real trash cost. Timed apart
+                // from the cheap destroy drain below.
+#if SNITCH
+                Profiler.Begin("Litterally.Route.Settle");
+                try {
+#endif
                 _doneSettling.Clear();
                 foreach (var kv in _settling)
                 {
@@ -136,10 +146,17 @@ namespace Litterally.Spawning
                     if (settled) { Record(kv.Key, s.Item, false); _doneSettling.Add(kv.Key); }
                 }
                 for (int k = 0; k < _doneSettling.Count; k++) _settling.Remove(_doneSettling[k]);
+#if SNITCH
+                } finally { Profiler.End("Litterally.Route.Settle"); }
+#endif
             }
 
             if (_destroyQueue.Count > 0)
             {
+#if SNITCH
+                Profiler.Begin("Litterally.Route.Destroy");
+                try {
+#endif
                 Suppress = true;
                 try
                 {
@@ -153,6 +170,9 @@ namespace Litterally.Spawning
                 }
                 finally { Suppress = false; }
                 _destroyQueue.Clear();
+#if SNITCH
+                } finally { Profiler.End("Litterally.Route.Destroy"); }
+#endif
             }
         }
 
