@@ -1,5 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <!-- Optional Snitch profiler in Debug builds (no-op when the Snitch host is absent). -->
+  <Import Project="$(MSBuildThisFileDirectory)../Workspace/build/Snitch.props" />
+
   <!--
     Litterally - MelonLoader IL2CPP trash performance mod for Schedule I.
     Routes the game's own generated trash into a cheap instanced field so the world can hold far more
