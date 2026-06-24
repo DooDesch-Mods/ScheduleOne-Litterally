@@ -5,6 +5,14 @@
        Release build stays clean. -->
   <Import Project="$(MSBuildThisFileDirectory)../Workspace/build/Snitch.props" Condition="Exists('$(MSBuildThisFileDirectory)../Workspace/build/Snitch.props')" />
 
+  <!-- CI checks out the shared Workspace repo as a SUBFOLDER of this project, so the SDK's default **/*.cs glob
+       would sweep in Workspace/ui, Workspace/build, etc. (uGUI design-system source this mod does not use).
+       This mod compiles only its own source - exclude everything under Workspace. No-op locally, where Workspace
+       is a sibling folder. Anything actually needed (e.g. the Snitch shim) is linked explicitly via props. -->
+  <ItemGroup>
+    <Compile Remove="Workspace/**/*.cs" />
+  </ItemGroup>
+
   <!--
     Litterally - MelonLoader IL2CPP trash performance mod for Schedule I.
     Routes the game's own generated trash into a cheap instanced field so the world can hold far more
