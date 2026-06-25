@@ -5,7 +5,6 @@ namespace Litterally.UI
     /// <summary>
     /// Minimal, release-safe on-screen FPS readout (top-right). Opt-in via Preferences.ShowFpsCounter (default
     /// OFF), drawn from Core.OnGUI when enabled. Uses Unity's smoothed delta so the number doesn't jitter.
-    /// (Distinct from the DEBUG-only DebugHud, which is excluded from Release builds.)
     /// </summary>
     internal static class FpsCounter
     {

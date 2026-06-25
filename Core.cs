@@ -8,9 +8,6 @@ using Litterally.Profiling;
 #endif
 using Litterally.SaveGuard;
 using Litterally.Spawning;
-#if DEBUG
-using Litterally.UI;
-#endif
 #if SNITCH
 using Snitch.Api;                 // Profiler section timing (Debug + EnableSnitch only; no-op when host absent)
 #endif
@@ -25,7 +22,7 @@ namespace Litterally
     /// MelonLoader entry point for the Litterally trash-performance mod. The release build routes the game's own
     /// generated trash into a cheap instanced field (rendered cheaply, materialized into real pickup-able items
     /// near the player + cleaners) so the world can hold far more trash with little cost. DEBUG builds additionally
-    /// wire the benchmark/ablation harness (spawn pump, perf sampler, on-screen HUD, dev hotkeys + console).
+    /// wire the benchmark/ablation harness (spawn pump, perf sampler, dev console + the Snitch profiler panel).
     /// </summary>
     public sealed class Core : MelonMod
     {
@@ -68,7 +65,7 @@ namespace Litterally
             HookModManager();
 
 #if DEBUG
-            Log.Msg("Litterally v1.0.0 (DEBUG) - trash performance layer active. Dev hotkeys: F5 ARM, F7/F8/F9 spawn 100/1k/10k, F11 sweep, F6 HUD.");
+            Log.Msg("Litterally v1.0.0 (DEBUG) - trash performance layer active. Dev controls: the Snitch profiler panel (spawn/clear/sweep/toggles) or the 'tv' dev-console commands.");
             Log.Warning("Litterally DEBUG: the benchmark spawns thousands of TEMPORARY trash - use a throwaway save. It auto-clears on save/scene-change/quit.");
 #else
             Log.Msg("Litterally v1.0.0 - trash performance layer active.");
@@ -269,7 +266,6 @@ namespace Litterally
                 PerfSampler.ResetGcWindow();
             }
 
-            PollHotkeys();
             TrashSpawner.Tick();
             PerfSampler.Tick();
             AblationController.Tick();
@@ -313,16 +309,13 @@ namespace Litterally
                 var tm = GameTrash.TrashManagerOrNull();
                 int mgr = tm != null ? GameTrash.TrashItemCount(tm) : -1;
                 float fps = Time.unscaledDeltaTime > 0f ? 1f / Time.unscaledDeltaTime : 0f;
-                DiagLog.Heartbeat($"frame={_frame} ours={TrashRegistry.Count} mgr={mgr} pending={TrashSpawner.Pending} fps={fps:F1} mode={(Preferences.SpawnKinematic ? "kin" : "dyn")} hud={Preferences.ShowHud}");
+                DiagLog.Heartbeat($"frame={_frame} ours={TrashRegistry.Count} mgr={mgr} pending={TrashSpawner.Pending} fps={fps:F1} mode={(Preferences.SpawnKinematic ? "kin" : "dyn")}");
             }
 #endif
         }
 
         public override void OnGUI()
         {
-#if DEBUG
-            DebugHud.Draw();
-#endif
             if (!_inWorld) return;
             if (Preferences.ShowFpsCounter) UI.FpsCounter.Draw();
             if (Preferences.ShowStatsPanel) UI.StatsPanel.Draw();
@@ -361,75 +354,6 @@ namespace Litterally
         }
 
 #if DEBUG
-        // ----- input (DEBUG only) -----
-
-        private void PollHotkeys()
-        {
-            try
-            {
-                if (Input.GetKeyDown(KeyCode.F5))
-                {
-                    bool armed = !Preferences.ArmBenchmark;
-                    Preferences.SetArm(armed);
-                    Log.Msg("[Core] Benchmark " + (armed ? "ARMED" : "disarmed") + ".");
-                }
-                if (Input.GetKeyDown(KeyCode.F6))
-                {
-                    Preferences.SetShowHud(!Preferences.ShowHud);
-                }
-                if (Input.GetKeyDown(KeyCode.F4))
-                {
-                    bool kin = !Preferences.SpawnKinematic;
-                    Preferences.SetSpawnKinematic(kin);
-                    Log.Msg("[Core] Spawn mode = " + (kin ? "KINEMATIC (frozen, safe for 10k)" : "DYNAMIC (falling physics)") + ".");
-                }
-                if (Input.GetKeyDown(KeyCode.F1))
-                {
-                    bool bp = !Preferences.BypassCap;
-                    Preferences.SetBypassCap(bp);
-                    Log.Msg("[Core] Cap bypass = " + (bp ? "ON (direct clones - no 2000 limit)" : "off (game CreateTrashItem - 2000 cap)") + ".");
-                }
-                // While a sweep or physics A/B runs, ignore manual keys - they would pollute the
-                // controlled measurement (which is exactly what corrupted the first CSV).
-                if (AblationController.Active || PhysicsProbe.Active)
-                {
-                    if (Input.GetKeyDown(KeyCode.F3) || Input.GetKeyDown(KeyCode.F7) || Input.GetKeyDown(KeyCode.F8)
-                        || Input.GetKeyDown(KeyCode.F9) || Input.GetKeyDown(KeyCode.F10) || Input.GetKeyDown(KeyCode.F11))
-                    {
-                        Log.Warning("[Core] A measurement is running - manual keys ignored. Press F12 to abort.");
-                    }
-                    if (Input.GetKeyDown(KeyCode.F12))
-                    {
-                        AblationController.Abort("user pressed F12");
-                        PhysicsProbe.Abort("user pressed F12");
-                    }
-                    return;
-                }
-
-                if (Input.GetKeyDown(KeyCode.F2)) PhysicsConfigDump.Dump();
-                if (Input.GetKeyDown(KeyCode.F3)) PhysicsProbe.Start();
-                if (Input.GetKeyDown(KeyCode.F7)) TrashSpawner.RequestSpawn(100);
-                if (Input.GetKeyDown(KeyCode.F8)) TrashSpawner.RequestSpawn(1000);
-                if (Input.GetKeyDown(KeyCode.F9)) TrashSpawner.RequestSpawn(10000);
-                if (Input.GetKeyDown(KeyCode.F10))
-                {
-                    if (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift))
-                    {
-                        SaveSafety.PurgeAll();
-                    }
-                    else
-                    {
-                        SaveSafety.ScopedClear();
-                    }
-                }
-                if (Input.GetKeyDown(KeyCode.F11)) AblationController.StartSweep();
-            }
-            catch (Exception e)
-            {
-                Log.Warning("[Core] hotkey error: " + e.Message);
-            }
-        }
-
         // ----- command dispatch (shared by MelonPrefs + ModManager events) -----
 
         private void HandleCommands()

@@ -74,7 +74,6 @@
     <Compile Remove="Profiling/AblationController.cs" />
     <Compile Remove="Profiling/PhysicsProbe.cs" />
     <Compile Remove="Profiling/PhysicsConfigDump.cs" />
-    <Compile Remove="UI/DebugHud.cs" />
     <Compile Remove="LitterallyConsole.cs" />
     <Compile Remove="DiagLog.cs" />
     <Compile Remove="Spawning/TrashSpawner.cs" />
