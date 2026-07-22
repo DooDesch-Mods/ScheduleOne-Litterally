@@ -1,6 +1,6 @@
 # Litterally
 
-> 🛟 **Need help or found a bug?** Get support at [support.doodesch.de](https://support.doodesch.de).
+> 🛟 **Need help or found a bug?** Get support at [support.doodesch.de/litterally](https://support.doodesch.de/litterally).
 
 A performance mod for **Schedule I** (MelonLoader / IL2CPP) that lets the world hold
 *litterally* far more trash with little cost, **without losing any base-game behaviour**.
