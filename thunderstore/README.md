@@ -1,6 +1,6 @@
 # Litterally - More Trash, Zero Lag
 
-> 🛟 **Need help or found a bug?** Get support at [support.doodesch.de](https://support.doodesch.de).
+> 🛟 **Need help or found a bug?** Get support at [support.doodesch.de/litterally](https://support.doodesch.de/litterally).
 
 > Schedule I's litter is a known performance sink - every scrap is a real object with a
 > rigidbody, colliders and its own save entry. Litterally routes all of it into a cheap
