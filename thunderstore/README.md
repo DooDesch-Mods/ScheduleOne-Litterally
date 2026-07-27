@@ -40,14 +40,13 @@ while everything still works exactly like vanilla.
 
 - **Schedule I** `0.4.5f2` (IL2CPP) with **MelonLoader 0.7.3+**.
 - **S1API** (pulled in as a dependency).
-- Optional: **Mod Manager & Phone App** for the in-game settings UI.
 
 The performance layer turns on automatically - there is nothing to configure to get the
 benefit.
 
 ## Settings
 
-Editable in the Mod Manager & Phone App UI or `UserData/MelonPreferences.cfg`
+Editable in `UserData/MelonPreferences.cfg`
 (category `Litterally_01_Main`):
 
 | Setting | Default | Meaning |

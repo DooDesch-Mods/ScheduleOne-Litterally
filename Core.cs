@@ -14,7 +14,6 @@ using Snitch.Api;                 // Profiler section timing (Debug + EnableSnit
 
 [assembly: MelonInfo(typeof(Litterally.Core), "Litterally", "1.0.0", "DooDesch", "https://github.com/DooDesch-Mods/ScheduleOne-Litterally")]
 [assembly: MelonGame("TVGS", "Schedule I")]
-[assembly: MelonOptionalDependencies("ModManager&PhoneApp")]
 
 namespace Litterally
 {
@@ -61,8 +60,6 @@ namespace Litterally
             // Only restore the routed field when the performance layer is enabled - otherwise stay fully vanilla
             // (an empty field renders nothing; the blob is left untouched on disk for when it's re-enabled).
             GameLifecycle.OnLoadComplete += () => { if (Preferences.EnablePerformanceLayer) Instanced.SaveBlob.Load(); };
-
-            HookModManager();
 
 #if DEBUG
             Log.Msg("Litterally v1.0.0 (DEBUG) - trash performance layer active. Dev controls: the Snitch profiler panel (spawn/clear/sweep/toggles) or the 'tv' dev-console commands.");
@@ -179,22 +176,6 @@ namespace Litterally
             }
             catch { }
             finally { _teleElapsed = 0f; _teleFrames = 0; _teleMaxDt = 0f; }
-        }
-
-        private void HookModManager()
-        {
-            // Optional dependency - isolated + guarded so a missing ModManager never breaks load.
-            try
-            {
-                // Live settings: re-apply whenever the user saves settings in the phone app or the in-game menu.
-                ModManagerPhoneApp.ModSettingsEvents.OnPhonePreferencesSaved += OnSettingsSaved;
-                ModManagerPhoneApp.ModSettingsEvents.OnMenuPreferencesSaved += OnSettingsSaved;
-                Log.Msg("[Core] Mod Manager & Phone App hooked (settings apply live).");
-            }
-            catch (Exception)
-            {
-                Log.Msg("[Core] Mod Manager & Phone App not present - settings via the MelonPreferences config file (apply live on save).");
-            }
         }
 
         /// <summary>
@@ -354,7 +335,7 @@ namespace Litterally
         }
 
 #if DEBUG
-        // ----- command dispatch (shared by MelonPrefs + ModManager events) -----
+        // ----- command dispatch (driven by MelonPreferences saves) -----
 
         private void HandleCommands()
         {

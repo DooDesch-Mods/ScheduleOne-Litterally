@@ -29,8 +29,7 @@ while everything still works exactly like vanilla:
 ## Install
 
 1. Install [MelonLoader](https://github.com/LavaGang/MelonLoader) for Schedule I.
-2. Install **S1API** (required) and, optionally, **Mod Manager & Phone App** (for an
-   in-game settings screen).
+2. Install **S1API** (required).
 3. Drop `Litterally.dll` into the game's `Mods/` folder.
 
 The performance layer turns on automatically - there is nothing to configure to get the
