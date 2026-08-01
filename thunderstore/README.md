@@ -38,7 +38,7 @@ while everything still works exactly like vanilla.
 
 ## Requirements
 
-- **Schedule I** `0.4.5f2` (IL2CPP) with **MelonLoader 0.7.3+**.
+- **Schedule I** `0.4.6f11` (IL2CPP) with **MelonLoader 0.7.3+**.
 - **S1API** (pulled in as a dependency).
 
 The performance layer turns on automatically - there is nothing to configure to get the
