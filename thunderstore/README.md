@@ -1,13 +1,14 @@
-# Litterally - More Trash, Zero Lag
+# Litterally - Trash Without the Lag
 
 > 🛟 **Need help or found a bug?** Get support at [support.doodesch.de/litterally](https://support.doodesch.de/litterally).
 
 > Schedule I's litter is a known performance sink - every scrap is a real object with a
 > rigidbody, colliders and its own save entry. Litterally routes all of it into a cheap
-> instanced field and only makes the trash near you real, so the map can hold *litterally*
-> tens of thousands of pieces while everything still works like vanilla.
+> instanced field and only makes the trash near you real. You get the vanilla amount of
+> litter and better frames; turn one setting up and the map holds *litterally* tens of
+> thousands of pieces, still at a playable frame rate.
 
-![Version](https://img.shields.io/badge/version-1.0.0-blue)
+![Version](https://img.shields.io/badge/version-1.1.0-blue)
 ![Game](https://img.shields.io/badge/game-Schedule%20I-purple)
 ![MelonLoader](https://img.shields.io/badge/MelonLoader-0.7.3+-green)
 ![S1API](https://img.shields.io/badge/S1API-required-orange)
@@ -20,8 +21,8 @@ generated trash into a cheap **GPU-instanced field** (a few draw calls, compact 
 **materializes real, interactable items only in the small working set around the player and
 cleaners**. Everything else stays virtual until you (or a cleaner) actually get near it.
 
-The result: the map can hold tens of thousands of trash items at a playable frame rate,
-while everything still works exactly like vanilla.
+Turn the multiplier up and the map holds tens of thousands of trash items at a playable
+frame rate, with everything still working exactly like vanilla.
 
 ## Features
 
@@ -33,8 +34,8 @@ while everything still works exactly like vanilla.
   *outside* the game's save folder so it can never bloat or corrupt your save.
 - **Good citizen** - only the game generator's own trash is absorbed; trash another mod
   creates directly is left untouched.
-- **More trash, on demand** - raise `TrashMultiplier` to pile up far more litter than
-  vanilla, kept cheap by the performance layer.
+- **More trash if you want it** - `TrashMultiplier` defaults to 1, the vanilla amount.
+  Raise it to pile up far more litter; the same layer keeps that cheap.
 
 ## Requirements
 
@@ -56,7 +57,7 @@ Editable in `UserData/MelonPreferences.cfg`
 | `MaxRealItems` | 200 | How many trash items are real/interactable around you at once. |
 | `MaterializeDistance` | 32 | How far ahead (m) trash becomes interactable. |
 | `RenderDistance` | 150 | How far (m) the instanced field draws. |
-| `TrashMultiplier` | 10 | Multiply the game's own trash output (1 = vanilla, up to 1000). |
+| `TrashMultiplier` | 1 | Multiply the game's own trash output (1 = vanilla, up to 1000). |
 | `ActivePhysics` | off | Materialized trash uses active (sleeping-dynamic) physics. |
 
 Optional on-screen overlays (all off by default): `ShowFpsCounter`, `ShowActiveItems`,

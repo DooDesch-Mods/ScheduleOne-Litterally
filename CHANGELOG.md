@@ -4,6 +4,16 @@ All notable changes to Litterally are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 project adheres to Semantic Versioning.
 
+## [1.1.0] - 2026-08-04
+
+### Changed
+
+- New installs now get the vanilla amount of trash. `TrashMultiplier` used to default to 10,
+  which meant installing a performance mod also multiplied your litter by ten. Set it back up
+  whenever you want the piles; the layer keeps them just as cheap.
+  - Already playing? Your `MelonPreferences.cfg` keeps whatever you have set. Change it there
+    if you want the new default.
+
 ## [1.0.1] - 2026-08-04
 
 ### Fixed

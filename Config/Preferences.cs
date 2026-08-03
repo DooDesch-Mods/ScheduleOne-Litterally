@@ -83,14 +83,15 @@ namespace Litterally.Config
                 "saving when looking across open ground. Does not affect interaction (see Materialize distance). " +
                 "Lower = more FPS / a nearer trash horizon; higher = trash visible further. Clamped 40-600.",
                 new MelonLoader.Preferences.ValueRange<float>(40f, 600f));
-            _trashMultiplier = Create("TrashMultiplier", 10, "Trash amount multiplier",
-                "Multiplies the game's OWN trash density (vanilla 0.015/m2 x this). 1 = vanilla; 10 = default; " +
-                "50 ~ 100,000; up to 1000 ~ 2,000,000 total across the map (extreme - very high values cost FPS " +
-                "as dense areas fill). The performance layer absorbs it into a cheap instanced field and fills " +
-                "the world around you as you explore. Clamped 1-1000.",
+            _trashMultiplier = Create("TrashMultiplier", 1, "Trash amount multiplier",
+                "Multiplies the game's OWN trash density (vanilla 0.015/m2 x this). 1 = vanilla amount (default) - " +
+                "the mod then only makes the existing trash cheap to render, without adding any. Raise it if you " +
+                "WANT more litter: 10 is comfortable, 50 ~ 100,000, up to 1000 ~ 2,000,000 across the map (extreme; " +
+                "very high values cost FPS as dense areas fill). The performance layer absorbs it into a cheap " +
+                "instanced field and fills the world around you as you explore. Clamped 1-1000.",
                 new MelonLoader.Preferences.ValueRange<int>(1, 1000));
             _activePhysics = Create("ActivePhysics", false, "Materialized trash has active physics",
-                "OFF (default) = trash near you is frozen at its resting pose (cheapest, seamless). ON = the real " +
+                "OFF (default) = trash near you is frozen at its resting pose (cheapest, and you cannot tell). ON = the real " +
                 "items materialized around you have live physics (they fall/settle and can be shoved). Applies live.");
             _showFps = Create("ShowFpsCounter", false, "Show FPS counter",
                 "Shows a small on-screen FPS readout (top-right). OFF by default. Applies live.");
@@ -161,7 +162,7 @@ namespace Litterally.Config
         internal static int MaxRealItems => Mathf.Clamp(_maxRealItems?.Value ?? 200, 50, 2000);
         internal static float MaterializeDistance => Mathf.Clamp(_materializeDistance?.Value ?? 32f, 8f, 80f);
         internal static float RenderDistance => Mathf.Clamp(_renderDistance?.Value ?? 150f, 40f, 600f);
-        internal static int TrashMultiplier => Mathf.Clamp(_trashMultiplier?.Value ?? 10, 1, 1000);
+        internal static int TrashMultiplier => Mathf.Clamp(_trashMultiplier?.Value ?? 1, 1, 1000);
         internal static bool ActivePhysics => _activePhysics?.Value ?? false;
         internal static bool ShowFpsCounter => _showFps?.Value ?? false;
         internal static bool ShowActiveItems => _showActiveItems?.Value ?? false;

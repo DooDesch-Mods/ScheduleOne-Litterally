@@ -2,8 +2,16 @@
 
 > 🛟 **Need help or found a bug?** Get support at [support.doodesch.de/litterally](https://support.doodesch.de/litterally).
 
-A performance mod for **Schedule I** (MelonLoader / IL2CPP) that lets the world hold
-*litterally* far more trash with little cost, **without losing any base-game behaviour**.
+![Version](https://img.shields.io/badge/version-1.1.0-blue)
+![Game](https://img.shields.io/badge/game-Schedule%20I-purple)
+![MelonLoader](https://img.shields.io/badge/MelonLoader-0.7.3+-green)
+![S1API](https://img.shields.io/badge/S1API-required-orange)
+![Status](https://img.shields.io/badge/status-working-brightgreen)
+
+A performance mod for **Schedule I** (MelonLoader / IL2CPP) that makes the game's own litter
+cheap to run, without losing any base-game behaviour. Out of the box you get the vanilla
+amount of trash and better frames. One setting piles on *litterally* as much more as you
+like, and the same layer keeps that cheap too.
 
 ## What it does
 
@@ -14,8 +22,8 @@ in a few draw calls, stored as compact arrays) and **materializes real, interact
 only in the small working set around the player and cleaners**. Everything else stays
 virtual until you (or a cleaner) actually get near it.
 
-The result: the map can hold tens of thousands of trash items at a playable frame rate,
-while everything still works exactly like vanilla:
+Turn the multiplier up and the map holds tens of thousands of trash items at a playable
+frame rate, with everything still working exactly like vanilla:
 
 - **Pick up / throw** trash near you - the items in front of you are real `TrashItem`s.
 - **Cleaners** roam, collect the litter, empty their bins and dispose the bags as usual.
@@ -47,7 +55,7 @@ Configurable via the MelonPreferences file (`UserData/MelonPreferences.cfg`, cat
 | `MaxRealItems` | 200 | How many trash items are real/interactable around you at once (the perf vs interaction-range dial). |
 | `MaterializeDistance` | 32 | How far ahead (metres) trash becomes interactable. |
 | `RenderDistance` | 150 | How far (metres) the instanced field draws - lower it for a perf win on open ground. |
-| `TrashMultiplier` | 10 | Multiply the game's own trash output (1 = vanilla amount, up to 1000), kept cheap by the layer. |
+| `TrashMultiplier` | 1 | Multiply the game's own trash output (1 = vanilla amount, up to 1000), kept cheap by the layer. |
 | `ActivePhysics` | off | Materialized trash uses active (sleeping-dynamic) physics. |
 
 Optional on-screen overlays, all off by default: `ShowFpsCounter`, `ShowActiveItems`
