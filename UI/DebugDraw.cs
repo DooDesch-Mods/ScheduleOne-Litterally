@@ -35,6 +35,19 @@ namespace Litterally.UI
             }
         }
 
+        // GUI.DrawTexture is stripped out of the IL2CPP build - calling it throws "Method unstripping failed"
+        // once per call, and these run from OnGUI in a loop, so it floods the log within seconds. GUI.Box with a
+        // background-only style paints the same pixels through a method that survived stripping.
+        private static GUIStyle _dot;
+        private static GUIStyle Dot
+        {
+            get
+            {
+                if (_dot == null) { _dot = new GUIStyle(); _dot.normal.background = Texture2D.whiteTexture; }
+                return _dot;
+            }
+        }
+
         private static void DrawDots(Camera cam, int n, Color col)
         {
             GUI.color = col;
@@ -43,7 +56,7 @@ namespace Litterally.UI
             {
                 Vector3 sp = cam.WorldToScreenPoint(_pos[k]);
                 if (sp.z <= 0f) continue;
-                GUI.DrawTexture(new Rect(sp.x - 3f, h - sp.y - 3f, 6f, 6f), Texture2D.whiteTexture);
+                GUI.Box(new Rect(sp.x - 3f, h - sp.y - 3f, 6f, 6f), GUIContent.none, Dot);
             }
             GUI.color = Color.white;
         }
@@ -60,7 +73,7 @@ namespace Litterally.UI
                 Vector3 wp = new Vector3(center.x + Mathf.Cos(a) * radius, center.y, center.z + Mathf.Sin(a) * radius);
                 Vector3 sp = cam.WorldToScreenPoint(wp);
                 if (sp.z <= 0f) continue;
-                GUI.DrawTexture(new Rect(sp.x - 3f, h - sp.y - 3f, 6f, 6f), Texture2D.whiteTexture);
+                GUI.Box(new Rect(sp.x - 3f, h - sp.y - 3f, 6f, 6f), GUIContent.none, Dot);
             }
             GUI.color = Color.white;
         }

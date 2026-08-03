@@ -4,6 +4,14 @@ All notable changes to Litterally are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 project adheres to Semantic Versioning.
 
+## [1.0.1] - 2026-08-04
+
+### Fixed
+
+- Turning on the debug stats panel or the trash highlighting no longer crashes the game. Both drew
+  their boxes in a way this build of the game does not support (`ShowStatsPanel`, `ShowActiveItems`
+  and `ShowRanges` in MelonPreferences).
+
 ## [1.0.0] - 2026-06-20
 
 First public release.

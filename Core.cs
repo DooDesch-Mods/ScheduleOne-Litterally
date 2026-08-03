@@ -12,7 +12,7 @@ using Litterally.Spawning;
 using Snitch.Api;                 // Profiler section timing (Debug + EnableSnitch only; no-op when host absent)
 #endif
 
-[assembly: MelonInfo(typeof(Litterally.Core), "Litterally", "1.0.0", "DooDesch", "https://github.com/DooDesch-Mods/ScheduleOne-Litterally")]
+[assembly: MelonInfo(typeof(Litterally.Core), "Litterally", "1.0.1", "DooDesch", "https://github.com/DooDesch-Mods/ScheduleOne-Litterally")]
 [assembly: MelonGame("TVGS", "Schedule I")]
 
 namespace Litterally

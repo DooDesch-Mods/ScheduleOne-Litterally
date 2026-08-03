@@ -10,6 +10,15 @@ namespace Litterally.UI
     internal static class StatsPanel
     {
         private static GUIStyle _label;
+        private static GUIStyle _backdrop;
+        private static GUIStyle Backdrop
+        {
+            get
+            {
+                if (_backdrop == null) { _backdrop = new GUIStyle(); _backdrop.normal.background = Texture2D.whiteTexture; }
+                return _backdrop;
+            }
+        }
         private static string _text = "";
         private static float _next;
         private static float _smoothFps;
@@ -39,7 +48,7 @@ namespace Litterally.UI
 
             Rect box = new Rect(10f, 70f, 232f, 174f);
             GUI.color = new Color(0f, 0f, 0f, 0.55f);
-            GUI.DrawTexture(box, Texture2D.whiteTexture);
+            GUI.Box(box, GUIContent.none, Backdrop);   // not DrawTexture: stripped in IL2CPP, see DebugDraw
             GUI.color = Color.white;
             GUI.Label(new Rect(box.x + 9f, box.y + 7f, box.width - 14f, box.height - 12f), _text, _label);
         }
