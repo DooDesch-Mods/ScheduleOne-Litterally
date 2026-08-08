@@ -2,6 +2,8 @@
 
 > 🛟 **Need help or found a bug?** Get support at [support.doodesch.de/litterally](https://support.doodesch.de/litterally).
 
+📖 **Documentation:** [docs.doodesch.de/mods/litterally/](https://docs.doodesch.de/mods/litterally/)
+
 ![Version](https://img.shields.io/badge/version-1.1.0-blue)
 ![Game](https://img.shields.io/badge/game-Schedule%20I-purple)
 ![MelonLoader](https://img.shields.io/badge/MelonLoader-0.7.3+-green)
