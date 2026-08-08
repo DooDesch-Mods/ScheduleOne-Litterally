@@ -21,6 +21,10 @@
        released version and cannot drift out of it. MUST come after the Workspace Remove so CI keeps the file. -->
   <Import Project="$(MSBuildThisFileDirectory)../Workspace/build/ModVersion.props" Condition="Exists('$(MSBuildThisFileDirectory)../Workspace/build/ModVersion.props')" />
   <Import Project="$(MSBuildThisFileDirectory)Workspace/build/ModVersion.props" Condition="Exists('$(MSBuildThisFileDirectory)Workspace/build/ModVersion.props')" />
+  <!-- Where a build is allowed to install: the test copy by default, and never a real game installation
+       without saying so out loud. See Workspace/build/Deploy.props. -->
+  <Import Project="$(MSBuildThisFileDirectory)../Workspace/build/Deploy.props" Condition="Exists('$(MSBuildThisFileDirectory)../Workspace/build/Deploy.props')" />
+  <Import Project="$(MSBuildThisFileDirectory)Workspace/build/Deploy.props" Condition="Exists('$(MSBuildThisFileDirectory)Workspace/build/Deploy.props')" />
 
 
   <!--
@@ -49,7 +53,6 @@
 
     <!-- Workspace lib roots (mirrors RVRepairVan ../Workspace/lib) -->
     <WorkspaceLibPath Condition="'$(WorkspaceLibPath)' == ''">$(MSBuildThisFileDirectory)../Workspace/lib</WorkspaceLibPath>
-    <ModsDirectory Condition="'$(ModsDirectory)' == ''">D:\Launcher\SteamLibrary\steamapps\common\Schedule I\Mods</ModsDirectory>
   </PropertyGroup>
 
   <!-- Backend selection derived from the active TargetFramework -->
