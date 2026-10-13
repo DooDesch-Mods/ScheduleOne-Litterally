@@ -9,6 +9,7 @@
 ![MelonLoader](https://img.shields.io/badge/MelonLoader-0.7.3+-green)
 ![S1API](https://img.shields.io/badge/S1API-required-orange)
 ![Status](https://img.shields.io/badge/status-working-brightgreen)
+[![Polyfill](https://polyfill.doomods.com/badge/litterally.svg)](https://polyfill.doomods.com/mod/litterally)
 
 A performance mod for **Schedule I** (MelonLoader / IL2CPP) that makes the game's own litter
 cheap to run, without losing any base-game behaviour. Out of the box you get the vanilla
