@@ -12,6 +12,7 @@
 ![Game](https://img.shields.io/badge/game-Schedule%20I-purple)
 ![MelonLoader](https://img.shields.io/badge/MelonLoader-0.7.3+-green)
 ![S1API](https://img.shields.io/badge/S1API-required-orange)
+[![MLVScan Litterally.dll](https://mlvscan.com/attestations/att_hem_CmEVEjWRbxgrdUS23n82/badge.svg)](https://mlvscan.com/attestations/att_hem_CmEVEjWRbxgrdUS23n82)
 
 ## What it does
 
