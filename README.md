@@ -2,6 +2,8 @@
 
 > 🛟 **Need help or found a bug?** Get support at [support.doodesch.de/litterally](https://support.doodesch.de/litterally).
 
+[![Discord](https://mods.doodesch.de/img/badge.svg)](https://mods.doodesch.de)
+
 📖 **Documentation:** [docs.doodesch.de/mods/litterally/](https://docs.doodesch.de/mods/litterally/)
 
 ![Version](https://img.shields.io/badge/version-1.1.0-blue)
@@ -83,3 +85,9 @@ host-authoritative multiplayer support is a planned follow-up.
   hotkeys, and a `tv ...` dev console. All of it is compiled out of Release via `#if DEBUG`.
 
 Author: DooDesch. Licensed MIT (see LICENSE.md).
+
+## Community
+
+[![DooDesch Mods on Discord](https://mods.doodesch.de/img/card.svg)](https://mods.doodesch.de)
+
+Join the DooDesch Mods Discord: update pings, polls on what comes next, and playtests of new mods.

@@ -2,6 +2,8 @@
 
 > 🛟 **Need help or found a bug?** Get support at [support.doodesch.de/litterally](https://support.doodesch.de/litterally).
 
+[![Discord](https://mods.doodesch.de/img/badge.svg)](https://mods.doodesch.de)
+
 > Schedule I's litter is a known performance sink - every scrap is a real object with a
 > rigidbody, colliders and its own save entry. Litterally routes all of it into a cheap
 > instanced field and only makes the trash near you real. You get the vanilla amount of
@@ -72,6 +74,12 @@ The instanced field is **local-only** - it is not replicated over the network - 
 default the performance layer **auto-disables in multiplayer** and the game runs vanilla.
 Set `EnableInMultiplayer = on` to try it anyway. Proper host-authoritative multiplayer
 support is a planned follow-up.
+
+## Community
+
+[![DooDesch Mods on Discord](https://mods.doodesch.de/img/card.svg)](https://mods.doodesch.de)
+
+Join the DooDesch Mods Discord: update pings, polls on what comes next, and playtests of new mods.
 
 ## License
 
