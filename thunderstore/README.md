@@ -2,8 +2,6 @@
 
 > 🛟 **Need help or found a bug?** Get support at [support.doodesch.de/litterally](https://support.doodesch.de/litterally).
 
-[![Discord](https://mods.doodesch.de/img/badge.svg)](https://mods.doodesch.de)
-
 > Schedule I's litter is a known performance sink - every scrap is a real object with a
 > rigidbody, colliders and its own save entry. Litterally routes all of it into a cheap
 > instanced field and only makes the trash near you real. You get the vanilla amount of
@@ -14,7 +12,7 @@
 ![Game](https://img.shields.io/badge/game-Schedule%20I-purple)
 ![MelonLoader](https://img.shields.io/badge/MelonLoader-0.7.3+-green)
 ![S1API](https://img.shields.io/badge/S1API-required-orange)
-[![Polyfill](https://polyfill.doomods.com/badge/litterally.svg)](https://polyfill.doomods.com/mod/litterally)
+[![Discord](https://mods.doodesch.de/img/badge.svg)](https://mods.doodesch.de) [![Polyfill](https://polyfill.doomods.com/badge/litterally.svg)](https://polyfill.doomods.com/mod/litterally)
 
 [![MLVScan Litterally.dll](https://mlvscan.com/attestations/att_hem_CmEVEjWRbxgrdUS23n82/badge.svg)](https://mlvscan.com/attestations/att_hem_CmEVEjWRbxgrdUS23n82)
 

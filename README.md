@@ -2,8 +2,6 @@
 
 > 🛟 **Need help or found a bug?** Get support at [support.doodesch.de/litterally](https://support.doodesch.de/litterally).
 
-[![Discord](https://mods.doodesch.de/img/badge.svg)](https://mods.doodesch.de)
-
 📖 **Documentation:** [docs.doodesch.de/mods/litterally/](https://docs.doodesch.de/mods/litterally/)
 
 ![Version](https://img.shields.io/badge/version-1.1.0-blue)
@@ -11,7 +9,7 @@
 ![MelonLoader](https://img.shields.io/badge/MelonLoader-0.7.3+-green)
 ![S1API](https://img.shields.io/badge/S1API-required-orange)
 ![Status](https://img.shields.io/badge/status-working-brightgreen)
-[![Polyfill](https://polyfill.doomods.com/badge/litterally.svg)](https://polyfill.doomods.com/mod/litterally)
+[![Discord](https://mods.doodesch.de/img/badge.svg)](https://mods.doodesch.de) [![Polyfill](https://polyfill.doomods.com/badge/litterally.svg)](https://polyfill.doomods.com/mod/litterally)
 
 [![MLVScan Litterally.dll](https://mlvscan.com/attestations/att_hem_CmEVEjWRbxgrdUS23n82/badge.svg)](https://mlvscan.com/attestations/att_hem_CmEVEjWRbxgrdUS23n82)
 
