@@ -121,19 +121,13 @@ namespace Litterally.Spawning
                     Quaternion rot = InstancedTrash.GetRotation(idx);
                     TrashItem item = null;
                     RouteHook.Suppress = true;                  // our own create -> route hook must NOT re-absorb it
-                    // startKinematic=FALSE: spawn it as a LIVE (physics-active) loose item, not a frozen one. The
-                    // cleaner's native AI only collects litter that is properly registered to the property; a
-                    // kinematic, never-settled item is ignored (verified live: player-thrown items get collected,
-                    // raw-materialized frozen ones do not).
-                    try { item = tm.CreateTrashItem(id, pos, rot, Vector3.zero, System.Guid.NewGuid().ToString(), false); }
+                    // Spawned as a live dynamic item with colliders on (the 0.4.7 default). Trash cans find litter
+                    // with Physics.OverlapSphere on the "Trash" layer (TrashContainerItem.CheckTrashItems) and the
+                    // cleaner picks from that list, so a real item with enabled colliders is all it needs.
+                    try { item = tm.CreateTrashItem(id, pos, rot, Vector3.zero, System.Guid.NewGuid().ToString()); }
                     catch (Exception e) { Core.Log?.Warning("[cleaner] materialize: " + e.Message); }
                     finally { RouteHook.Suppress = false; }
                     if (item == null) continue;
-                    // Replicate what a dropped/thrown item does so the cleaner recognises it as collectable loose
-                    // litter: keep physics active and (re)run the property association (TrashItem.RecheckProperty,
-                    // :866). Without this the item sits in trashItems but is never targeted by PickUpTrashBehaviour.
-                    try { item.SetPhysicsActive(true); item.RecheckProperty(); }
-                    catch (Exception e) { Core.Log?.Warning("[cleaner] register: " + e.Message); }
                     InstancedTrash.MarkRealCreated();
                     InstancedTrash.SetRealized(idx, true);       // keep both actors + the route hook off it
                     InstancedTrash.Hide(idx);                    // hide the instanced copy; the real one renders/interacts

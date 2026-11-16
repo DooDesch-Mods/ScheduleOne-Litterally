@@ -58,14 +58,14 @@ namespace Litterally.Profiling
         private static void DumpItem(StringBuilder sb, TrashItem item)
         {
             GameObject go = null;
-            try { go = item.Rigidbody != null ? item.Rigidbody.gameObject : item.gameObject; } catch { try { go = item.gameObject; } catch { } }
+            try { Rigidbody body = GameTrash.BodyOf(item); go = body != null ? body.gameObject : item.gameObject; } catch { try { go = item.gameObject; } catch { } }
             if (go == null) { sb.AppendLine("[PhysCfg] item gameObject null"); return; }
 
             try { sb.AppendLine($"[PhysCfg] ITEM '{go.name}'  layer={go.layer} ({LayerMask.LayerToName(go.layer)})  selfCollide={!Physics.GetIgnoreLayerCollision(go.layer, go.layer)}"); } catch { }
 
             try
             {
-                Rigidbody rb = item.Rigidbody;
+                Rigidbody rb = GameTrash.BodyOf(item);
                 if (rb != null)
                 {
                     sb.AppendLine($"[PhysCfg] RB  mass={rb.mass}  drag={rb.drag}  angularDrag={rb.angularDrag}  useGravity={rb.useGravity}  isKinematic={rb.isKinematic}");

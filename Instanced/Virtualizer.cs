@@ -144,6 +144,13 @@ namespace Litterally.Instanced
                 {
                     Vector3 ip = item.transform.position;
 
+                    // Performance mode spawns the item frozen. The game drags trash with rigidbody forces and,
+                    // since 0.4.7, no longer wakes a frozen item on drag start, so wake it here or it cannot move.
+                    if (real.Rb != null && real.Rb.isKinematic && item.IsBeingDragged())
+                    {
+                        Spawning.GameTrash.SetPhysicsActive(item, true);
+                    }
+
                     // Render-decouple handoff: while the real item rests at its virtual pose the INSTANCED copy draws
                     // it (identical shading, so merely looking at it never changes its appearance). The instant it
                     // diverges - grabbed, thrown or shoved - reveal its real renderer and hide the instance so the
@@ -223,7 +230,7 @@ namespace Litterally.Instanced
                     // Suppress so the route-hook never re-absorbs our OWN near-player interaction items.
                     Spawning.RouteHook.Suppress = true;
                     TrashItem item;
-                    try { item = tm.CreateTrashItem(InstancedTrash.GetTypeId(idx), pos, rot, Vector3.zero, NextId(), !Collide); }
+                    try { item = Spawning.GameTrash.Create(tm, InstancedTrash.GetTypeId(idx), pos, rot, NextId(), !Collide); }
                     finally { Spawning.RouteHook.Suppress = false; }
                     if (item != null)
                     {

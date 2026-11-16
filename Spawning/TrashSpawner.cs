@@ -225,7 +225,7 @@ namespace Litterally.Spawning
                 string guid = System.Guid.NewGuid().ToString();
                 RouteHook.Suppress = true;
                 TrashItem item;
-                try { item = tm.CreateTrashItem(id, pos, rot, Vector3.zero, guid, Config.Preferences.SpawnKinematic); }
+                try { item = GameTrash.Create(tm, id, pos, rot, guid, Config.Preferences.SpawnKinematic); }
                 finally { RouteHook.Suppress = false; }
                 if (item != null)
                 {
@@ -250,7 +250,7 @@ namespace Litterally.Spawning
 
         private static int SafeLimit()
         {
-            try { return TrashManager.TRASH_ITEM_LIMIT; } catch { return -1; }
+            try { return GameTrash.TrashItemLimit; } catch (Exception e) { Core.Log?.Warning("[Spawn] limit read failed: " + e.Message); return -1; }
         }
 
         private static Vector3 RandomSpawnPoint(Vector3 center)
@@ -300,7 +300,7 @@ namespace Litterally.Spawning
         {
             try
             {
-                Rigidbody rb = item.Rigidbody;
+                Rigidbody rb = GameTrash.BodyOf(item);
                 GameObject go = rb != null ? rb.gameObject : item.gameObject;
                 if (go == null)
                 {

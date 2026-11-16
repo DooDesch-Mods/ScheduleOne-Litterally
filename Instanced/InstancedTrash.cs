@@ -1177,7 +1177,7 @@ namespace Litterally.Instanced
                     Vector3 pos = pp + new Vector3((gx - 1.5f) * ProbeSpacing, ProbeDropHeight, (gz - 1.5f) * ProbeSpacing);
                     TrashItem probe = null;
                     Spawning.RouteHook.Suppress = true;
-                    try { probe = tm.CreateTrashItem(ty.Id, pos, UnityEngine.Random.rotation, Vector3.zero, System.Guid.NewGuid().ToString(), false); }
+                    try { probe = tm.CreateTrashItem(ty.Id, pos, UnityEngine.Random.rotation, Vector3.zero, System.Guid.NewGuid().ToString()); }
                     catch (Exception e) { Core.Log?.Warning("[inst] probe spawn failed for " + ty.Id + ": " + e.Message); }
                     finally { Spawning.RouteHook.Suppress = false; }
                     if (probe != null) MarkRealCreated();
@@ -1357,7 +1357,7 @@ namespace Litterally.Instanced
                     Quaternion vrot = GetRotation(i);
                     TrashItem real = null;
                     Spawning.RouteHook.Suppress = true;
-                    try { real = tm.CreateTrashItem(id, vpos, vrot, Vector3.zero, System.Guid.NewGuid().ToString(), false); } // DYNAMIC
+                    try { real = tm.CreateTrashItem(id, vpos, vrot, Vector3.zero, System.Guid.NewGuid().ToString()); } // DYNAMIC
                     catch (Exception e) { Core.Log?.Warning("[drift] spawn failed: " + e.Message); }
                     finally { Spawning.RouteHook.Suppress = false; }
                     if (real == null) continue;
