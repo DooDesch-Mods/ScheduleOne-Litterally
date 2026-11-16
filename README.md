@@ -11,7 +11,7 @@
 ![Status](https://img.shields.io/badge/status-working-brightgreen)
 [![Discord](https://mods.doodesch.de/img/badge.svg)](https://mods.doodesch.de) [![Polyfill](https://polyfill.doomods.com/badge/litterally.svg)](https://polyfill.doomods.com/mod/litterally)
 
-[![MLVScan Litterally.dll](https://mlvscan.com/attestations/att_hem_CmEVEjWRbxgrdUS23n82/badge.svg)](https://mlvscan.com/attestations/att_hem_CmEVEjWRbxgrdUS23n82)
+[![MLVScan Litterally.dll](https://mlvscan.com/attestations/att_b_yt_hQeHN0IXtEO99P8954Y/badge.svg)](https://mlvscan.com/attestations/att_b_yt_hQeHN0IXtEO99P8954Y)
 
 A performance mod for **Schedule I** (MelonLoader / IL2CPP) that makes the game's own litter
 cheap to run, without losing any base-game behaviour. Out of the box you get the vanilla
