@@ -100,6 +100,8 @@ namespace Litterally
                     case "up": MovePlayerUp(p); break;
                     case "overview": ApplyFov(90f); MovePlayer(0f, 40f); Log("overview: player +40m, fov 90"); break;
                     case "status": Status(); break;
+                    case "dragtest": DragTest.Command(p); break;
+                    case "cleanerrig": CleanerRig.Command(p); break;
                     default: Log($"unknown subcommand '{cmd}'. Use: arm|bypass|kin|spawn N|clear|purge|physab|sweep|dump|status"); break;
                 }
             }

@@ -67,6 +67,9 @@ namespace Litterally.Instanced
 
         internal static int RealCount => _real.Count;
 
+        /// <summary>The real item the Virtualizer currently holds for instance idx, or null.</summary>
+        internal static TrashItem RealItemOf(int idx) => _real.TryGetValue(idx, out Real r) ? r.Item : null;
+
         /// <summary>Copy the instance indices of the items currently materialized near the player into buf; returns
         /// the count written. For the debug overlay (highlight the active/interactable set). No allocation.</summary>
         internal static int CopyRealIndices(int[] buf)
