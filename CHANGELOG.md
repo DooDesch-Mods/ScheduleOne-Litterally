@@ -4,6 +4,15 @@ All notable changes to Litterally are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 project adheres to Semantic Versioning.
 
+## [1.1.1] - 2026-11-16
+
+### Fixed
+
+- Trash shows up again on game 0.4.7: stored trash was never put back into the world, and an error
+  repeated every frame.
+- Cleaners empty their cans again on 0.4.7: the performance layer never put trash inside a can's
+  pickup area, so they found nothing to collect.
+
 ## [1.1.0] - 2026-08-04
 
 ### Changed

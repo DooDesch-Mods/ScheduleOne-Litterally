@@ -4,7 +4,7 @@
 
 📖 **Documentation:** [docs.doodesch.de/mods/litterally/](https://docs.doodesch.de/mods/litterally/)
 
-![Version](https://img.shields.io/badge/version-1.1.0-blue)
+![Version](https://img.shields.io/badge/version-1.1.1-blue)
 ![Game](https://img.shields.io/badge/game-Schedule%20I-purple)
 ![MelonLoader](https://img.shields.io/badge/MelonLoader-0.7.3+-green)
 ![S1API](https://img.shields.io/badge/S1API-required-orange)
@@ -89,3 +89,5 @@ Author: DooDesch. Licensed MIT (see LICENSE.md).
 [![DooDesch Mods on Discord](https://mods.doodesch.de/img/card.svg)](https://mods.doodesch.de)
 
 Join the DooDesch Mods Discord: update pings, polls on what comes next, and playtests of new mods.
+
+This mod is written with help from generative AI tools (Anthropic Claude, OpenAI Codex).
