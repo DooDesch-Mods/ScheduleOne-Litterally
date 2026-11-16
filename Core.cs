@@ -251,6 +251,8 @@ namespace Litterally
             PerfSampler.Tick();
             AblationController.Tick();
             PhysicsProbe.Tick();
+            DragTest.Tick();
+            CleanerRig.Tick();
 #endif
 
             // ----- always-compiled performance layer -----

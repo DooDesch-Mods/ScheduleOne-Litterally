@@ -259,9 +259,7 @@ namespace Litterally.Profiling
                 if (item == null) continue;
                 try
                 {
-                    Rigidbody rb = item.Rigidbody;
-                    if (rb != null) rb.isKinematic = !on;
-                    item.SetPhysicsActive(on);
+                    GameTrash.SetPhysicsActive(item, on, collidersFollow: true);
                 }
                 catch { }
             }
@@ -272,7 +270,7 @@ namespace Litterally.Profiling
             foreach (TrashItem item in TrashRegistry.Spawned)
             {
                 if (item == null) continue;
-                try { item.SetCollidersEnabled(on); } catch { }
+                try { GameTrash.SetCollidersEnabled(item, on); } catch (Exception e) { Core.Log?.Warning("[ablate] colliders: " + e.Message); }
             }
         }
 
@@ -320,7 +318,7 @@ namespace Litterally.Profiling
                 if (item == null) continue;
                 try
                 {
-                    Rigidbody rb = item.Rigidbody;
+                    Rigidbody rb = GameTrash.BodyOf(item);
                     if (rb == null) continue;
                     if (rb.IsSleeping()) sleeping++; else awake++;
                 }

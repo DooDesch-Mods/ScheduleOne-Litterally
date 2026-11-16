@@ -91,7 +91,8 @@ namespace Litterally.Spawning
                 TrashItem ti = go.GetComponent<TrashItem>();
                 if (ti != null)
                 {
-                    try { ti.Deinitialize(); } catch { }   // undo the one-time Saveable/manager registration
+                    // Since 0.4.7 a TrashItem registers nothing until Initialize (GUID) runs, so the inactive
+                    // template only needs the component removed.
                     UnityEngine.Object.DestroyImmediate(ti);
                 }
             }

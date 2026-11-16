@@ -16,7 +16,7 @@ namespace Litterally.Spawning
     /// pose, records it as pure DATA in InstancedTrash (rendered cheaply, materialized near the player for pickup),
     /// and destroys the real GameObject - so the world fills with trash without paying for N real objects/saveables.
     ///
-    /// The design accounts for the game's create pattern: each logical spawn fires CreateAndReturnTrashItem + CreateTrashItem twice
+    /// The design accounts for the game's create pattern: each logical spawn fires CreateTrashItemInternal + CreateTrashItem twice
     /// each (public wraps private; FishNet echoes server+observer), all referencing the SAME real item. So we
     /// dedup by instance id (absorb exactly once) and patch the private creator. The DestroyTrash is DEFERRED to
     /// our per-frame Tick (not done inside the postfix) so we never delete the item mid RPC-fan-out.
@@ -193,7 +193,7 @@ namespace Litterally.Spawning
                 _logged++;
                 string id = "?"; Vector3 p = Vector3.zero;
                 try { if (result != null) { id = result.ID; p = result.transform.position; } } catch { }
-                Core.Log?.Msg($"[route-probe] {(isPrivate ? "CreateAndReturnTrashItem" : "CreateTrashItem")} -> {(result == null ? "NULL" : id)} @({p.x:F0},{p.y:F0},{p.z:F0})");
+                Core.Log?.Msg($"[route-probe] {(isPrivate ? "CreateTrashItemInternal" : "CreateTrashItem")} -> {(result == null ? "NULL" : id)} @({p.x:F0},{p.y:F0},{p.z:F0})");
             }
         }
 
@@ -245,11 +245,11 @@ namespace Litterally.Spawning
                     Core.Log?.Msg($"[route] absorbAny = {AbsorbAny} ({(AbsorbAny ? "absorb ALL trash incl. other mods' - legacy" : "absorb ONLY the game generator's trash - good-citizen default")}).");
                     break;
                 case "testlimit":
-                    // EMPIRICALLY RESOLVED 2026-06-19: reading TrashManager.TRASH_ITEM_LIMIT is fine (=2000), but
+                    // Reading TrashManager.TrashItemLimit (TRASH_ITEM_LIMIT before 0.4.7) is fine (=2000), but
                     // WRITING it hard-crashes the game (log stops mid-write, process dies). It is NOT a literal
                     // C# const (a real IL2CPP field exists), yet the field is effectively read-only - never write
                     // it. See docs/ARCHITECTURE.md. This command is now read-only.
-                    try { Core.Log?.Msg($"[limit] TRASH_ITEM_LIMIT = {TrashManager.TRASH_ITEM_LIMIT} (READ-ONLY; writing it hard-crashes the game - verified)."); }
+                    try { Core.Log?.Msg($"[limit] TrashItemLimit = {GameTrash.TrashItemLimit} (read-only; writing it crashes the game)."); }
                     catch (Exception e) { Core.Log?.Warning("[limit] read threw: " + e.Message); }
                     break;
                 case "clearreal":
@@ -281,13 +281,13 @@ namespace Litterally.Spawning
         }
     }
 
-    [HarmonyPatch(typeof(TrashManager), "CreateAndReturnTrashItem", new Type[] { typeof(string), typeof(Vector3), typeof(Quaternion), typeof(Vector3), typeof(string), typeof(bool) })]
+    [HarmonyPatch(typeof(TrashManager), "CreateTrashItemInternal", new Type[] { typeof(string), typeof(Vector3), typeof(Quaternion), typeof(Vector3), typeof(string) })]
     internal static class TM_CreateAndReturnTrashItem_Patch
     {
         private static void Postfix(TrashItem __result) { try { RouteHook.OnCreate(true, __result); } catch { } }
     }
 
-    [HarmonyPatch(typeof(TrashManager), "CreateTrashItem", new Type[] { typeof(string), typeof(Vector3), typeof(Quaternion), typeof(Vector3), typeof(string), typeof(bool) })]
+    [HarmonyPatch(typeof(TrashManager), "CreateTrashItem", new Type[] { typeof(string), typeof(Vector3), typeof(Quaternion), typeof(Vector3), typeof(string) })]
     internal static class TM_CreateTrashItem_Patch
     {
         // Public wrapper - only used for the diagnostic probe; real absorb dedups so this is harmless when Active.

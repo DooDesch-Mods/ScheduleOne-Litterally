@@ -67,6 +67,9 @@ namespace Litterally.Instanced
 
         internal static int RealCount => _real.Count;
 
+        /// <summary>The real item the Virtualizer currently holds for instance idx, or null.</summary>
+        internal static TrashItem RealItemOf(int idx) => _real.TryGetValue(idx, out Real r) ? r.Item : null;
+
         /// <summary>Copy the instance indices of the items currently materialized near the player into buf; returns
         /// the count written. For the debug overlay (highlight the active/interactable set). No allocation.</summary>
         internal static int CopyRealIndices(int[] buf)
@@ -143,6 +146,13 @@ namespace Litterally.Instanced
                 try
                 {
                     Vector3 ip = item.transform.position;
+
+                    // Performance mode spawns the item frozen. The game drags trash with rigidbody forces and,
+                    // since 0.4.7, no longer wakes a frozen item on drag start, so wake it here or it cannot move.
+                    if (real.Rb != null && real.Rb.isKinematic && item.IsBeingDragged())
+                    {
+                        Spawning.GameTrash.SetPhysicsActive(item, true);
+                    }
 
                     // Render-decouple handoff: while the real item rests at its virtual pose the INSTANCED copy draws
                     // it (identical shading, so merely looking at it never changes its appearance). The instant it
@@ -223,7 +233,7 @@ namespace Litterally.Instanced
                     // Suppress so the route-hook never re-absorbs our OWN near-player interaction items.
                     Spawning.RouteHook.Suppress = true;
                     TrashItem item;
-                    try { item = tm.CreateTrashItem(InstancedTrash.GetTypeId(idx), pos, rot, Vector3.zero, NextId(), !Collide); }
+                    try { item = Spawning.GameTrash.Create(tm, InstancedTrash.GetTypeId(idx), pos, rot, NextId(), !Collide); }
                     finally { Spawning.RouteHook.Suppress = false; }
                     if (item != null)
                     {

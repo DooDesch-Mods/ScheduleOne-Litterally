@@ -147,9 +147,7 @@ namespace Litterally.Profiling
                 if (item == null) continue;
                 try
                 {
-                    Rigidbody rb = item.Rigidbody;
-                    if (rb != null) rb.isKinematic = true;
-                    item.SetPhysicsActive(false);
+                    GameTrash.SetPhysicsActive(item, false, collidersFollow: true);
                 }
                 catch { }
             }
@@ -203,7 +201,7 @@ namespace Litterally.Profiling
 
         private static int SafeLimit()
         {
-            try { return TrashManager.TRASH_ITEM_LIMIT; } catch { return -1; }
+            try { return GameTrash.TrashItemLimit; } catch (Exception e) { Core.Log?.Warning("[probe] limit read failed: " + e.Message); return -1; }
         }
     }
 }
